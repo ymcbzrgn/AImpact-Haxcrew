@@ -42,212 +42,100 @@
 | **JSON keys (response)** | camelCase | `{ "fitScore": 85, "userName": "..." }` |
 | **Environment variables** | UPPER_SNAKE_CASE | `SUPABASE_URL`, `GEMINI_API_KEY` |
 
-#### 1.1.2 Monorepo Yapısı
+#### 1.1.2 Monorepo Yapısı (KISS - Paralel Çalışma İçin Optimize)
 
 ```
 deckmate/
-├── README.md
 ├── .gitignore
 ├── .env.example
-├── docker-compose.yml            # Local development
+├── README.md
 │
-├── frontend/                     # Next.js App
+├── frontend/                     # FRONTEND TEAM (Bekir + Bartın)
 │   ├── package.json
 │   ├── next.config.js
-│   ├── tailwind.config.js
+│   ├── tailwind.config.js        # PRD renk paleti
 │   ├── tsconfig.json
-│   ├── .env.local.example
-│   ├── public/
-│   │   ├── logo.svg
-│   │   └── favicon.ico
-│   └── src/
-│       ├── app/                  # App Router pages
-│       │   ├── layout.tsx
-│       │   ├── page.tsx          # Landing
-│       │   ├── auth/
-│       │   │   ├── login/
-│       │   │   │   └── page.tsx
-│       │   │   └── register/
-│       │   │       ├── page.tsx
-│       │   │       ├── startup/
-│       │   │       │   └── page.tsx
-│       │   │       └── investor/
-│       │   │           └── page.tsx
-│       │   ├── startup/
-│       │   │   ├── layout.tsx
-│       │   │   ├── dashboard/
-│       │   │   │   └── page.tsx
-│       │   │   ├── profile/
-│       │   │   │   └── page.tsx
-│       │   │   ├── deck/
-│       │   │   │   ├── page.tsx
-│       │   │   │   ├── upload/
-│       │   │   │   │   └── page.tsx
-│       │   │   │   └── [id]/
-│       │   │   │       └── analysis/
-│       │   │   │           └── page.tsx
-│       │   │   ├── visibility/
-│       │   │   │   └── page.tsx
-│       │   │   └── viewers/
-│       │   │       └── page.tsx
-│       │   └── investor/
-│       │       ├── layout.tsx
-│       │       ├── dashboard/
-│       │       │   └── page.tsx
-│       │       ├── discover/
-│       │       │   ├── page.tsx
-│       │       │   └── [id]/
-│       │       │       └── page.tsx
-│       │       ├── saved/
-│       │       │   └── page.tsx
-│       │       └── news/
-│       │           └── page.tsx
-│       ├── components/
-│       │   ├── ui/               # shadcn/ui
-│       │   │   ├── Button.tsx
-│       │   │   ├── Card.tsx
-│       │   │   ├── Input.tsx
-│       │   │   ├── Badge.tsx
-│       │   │   └── index.ts
-│       │   ├── layout/
-│       │   │   ├── Header.tsx
-│       │   │   ├── Sidebar.tsx
-│       │   │   └── Footer.tsx
-│       │   ├── startup/
-│       │   │   ├── StartupCard.tsx
-│       │   │   ├── DeckUploader.tsx
-│       │   │   ├── AnalysisResult.tsx
-│       │   │   ├── VisibilitySettings.tsx
-│       │   │   └── ViewersList.tsx
-│       │   ├── investor/
-│       │   │   ├── DiscoverFilters.tsx
-│       │   │   ├── StartupTeaser.tsx
-│       │   │   ├── FitScoreBadge.tsx
-│       │   │   └── NewsFeed.tsx
-│       │   └── shared/
-│       │       ├── DeckViewer.tsx
-│       │       ├── WatermarkOverlay.tsx
-│       │       ├── ScoreBadge.tsx
-│       │       └── LoadingSpinner.tsx
-│       ├── hooks/
-│       │   ├── useAuth.ts
-│       │   ├── useStartup.ts
-│       │   ├── useInvestor.ts
-│       │   ├── useDeckUpload.ts
-│       │   ├── useDeckAnalysis.ts
-│       │   └── useFitScore.ts
-│       ├── lib/
-│       │   ├── supabase/
-│       │   │   ├── client.ts
-│       │   │   └── server.ts
-│       │   ├── api.ts            # API client
-│       │   ├── utils.ts
-│       │   └── constants.ts
-│       ├── types/
-│       │   ├── startup.ts
-│       │   ├── investor.ts
-│       │   ├── deck.ts
-│       │   └── api.ts
-│       └── styles/
-│           └── globals.css
-│
-├── backend/                      # FastAPI App
-│   ├── requirements.txt
-│   ├── Dockerfile
+│   ├── postcss.config.js
 │   ├── .env.example
+│   └── src/
+│       ├── app/
+│       │   ├── layout.tsx        # Bekir
+│       │   ├── page.tsx          # Landing - Bekir
+│       │   ├── globals.css
+│       │   ├── auth/             # Bekir
+│       │   │   ├── login/
+│       │   │   └── register/
+│       │   ├── startup/          # Bartın
+│       │   │   ├── dashboard/
+│       │   │   ├── deck/
+│       │   │   └── profile/
+│       │   └── investor/         # Bartın
+│       │       ├── dashboard/
+│       │       ├── discover/
+│       │       └── saved/
+│       ├── components/
+│       │   ├── ui/               # Bekir - shadcn/ui
+│       │   ├── layout/           # Bekir
+│       │   ├── startup/          # Bartın
+│       │   └── investor/         # Bartın
+│       └── lib/
+│           ├── supabase.ts
+│           └── utils.ts
+│
+├── backend/                      # BACKEND TEAM (Yamaç + Nisa)
+│   ├── requirements.txt          # Yamaç
+│   ├── .env.example              # Yamaç
 │   └── app/
 │       ├── __init__.py
-│       ├── main.py               # FastAPI entry point
-│       ├── config/
+│       ├── main.py               # Yamaç - Entry + CORS
+│       ├── config.py             # Yamaç - Pydantic settings
+│       ├── routers/              # Nisa
 │       │   ├── __init__.py
-│       │   ├── settings.py       # Pydantic settings
-│       │   └── database.py       # Supabase client
-│       ├── routers/
-│       │   ├── __init__.py
+│       │   ├── health.py
 │       │   ├── auth.py
 │       │   ├── startup.py
 │       │   ├── investor.py
-│       │   ├── deck.py
-│       │   └── news.py
-│       ├── services/
-│       │   ├── __init__.py
-│       │   ├── startup_service.py
-│       │   ├── investor_service.py
-│       │   ├── deck_service.py
-│       │   └── news_service.py
-│       ├── schemas/
-│       │   ├── __init__.py
-│       │   ├── startup.py
-│       │   ├── investor.py
-│       │   ├── deck.py
-│       │   └── common.py
-│       ├── models/
-│       │   ├── __init__.py
-│       │   └── enums.py
-│       ├── middleware/
-│       │   ├── __init__.py
-│       │   └── auth.py
-│       └── utils/
-│           ├── __init__.py
-│           └── helpers.py
+│       │   └── deck.py
+│       ├── services/             # Nisa
+│       │   └── __init__.py
+│       └── schemas/              # Nisa
+│           └── __init__.py
 │
-├── ai/                           # AI Services
-│   ├── requirements.txt
-│   ├── Dockerfile
-│   ├── .env.example
+├── ai/                           # AI TEAM (Sinem + Melisa)
+│   ├── requirements.txt          # Sinem
+│   ├── .env.example              # Sinem
 │   └── app/
 │       ├── __init__.py
-│       ├── main.py               # FastAPI for AI endpoints
-│       ├── config/
+│       ├── main.py               # Sinem - Entry + CORS
+│       ├── config.py             # Sinem - Gemini settings
+│       ├── routers/              # Sinem
 │       │   ├── __init__.py
-│       │   ├── settings.py
-│       │   └── gemini.py         # Gemini client config
-│       ├── routers/
-│       │   ├── __init__.py
-│       │   ├── analyze.py        # Deck analysis endpoints
-│       │   └── fit.py            # Fit score endpoints
-│       ├── services/
-│       │   ├── __init__.py
+│       │   ├── health.py
+│       │   ├── analyze.py
+│       │   └── fit.py
+│       ├── services/             # Sinem
 │       │   ├── deck_analyzer.py
-│       │   ├── fit_calculator.py
-│       │   └── news_summarizer.py
-│       ├── prompts/
-│       │   ├── __init__.py
-│       │   ├── deck_analysis.py
-│       │   ├── fit_scoring.py
-│       │   └── news_summary.py
-│       └── utils/
+│       │   └── fit_calculator.py
+│       └── prompts/              # Melisa
 │           ├── __init__.py
-│           ├── pdf_extractor.py
-│           └── response_parser.py
+│           ├── deck_analysis.py
+│           └── fit_scoring.py
 │
-├── database/                     # Database migrations & seeds
-│   ├── migrations/
-│   │   ├── 001_create_users.sql
-│   │   ├── 002_create_startups.sql
-│   │   ├── 003_create_investors.sql
-│   │   ├── 004_create_pitch_decks.sql
-│   │   ├── 005_create_views.sql
-│   │   ├── 006_create_requests.sql
-│   │   ├── 007_create_fit_scores.sql
-│   │   └── 008_create_news.sql
-│   ├── seeds/
-│   │   ├── demo_startups.sql
-│   │   ├── demo_investors.sql
-│   │   └── demo_news.sql
-│   └── rls/
-│       └── policies.sql
-│
-├── docs/                         # Documentation
-│   ├── PRD.md
-│   ├── API.md
-│   └── SETUP.md
-│
-└── scripts/                      # Utility scripts
-    ├── setup.sh
-    ├── seed-db.sh
-    └── deploy.sh
+└── database/                     # YAMAÇ
+    └── migrations/
+        └── 001_initial_schema.sql
 ```
+
+**Dosya Sahipliği (Merge Conflict Önleme):**
+
+| Kişi | Sahip Olduğu Dosyalar |
+|------|----------------------|
+| **Yamaç** | Root files, `backend/app/main.py`, `backend/app/config.py`, `database/*` |
+| **Nisa** | `backend/app/routers/*`, `backend/app/services/*`, `backend/app/schemas/*` |
+| **Bekir** | `frontend/` root, `src/app/layout.tsx`, `src/app/page.tsx`, `src/app/auth/*`, `src/components/ui/*`, `src/lib/*` |
+| **Bartın** | `src/app/startup/*`, `src/app/investor/*`, `src/components/startup/*`, `src/components/investor/*` |
+| **Sinem** | `ai/` root, `ai/app/main.py`, `ai/app/config.py`, `ai/app/routers/*`, `ai/app/services/*` |
+| **Melisa** | `ai/app/prompts/*` |
 
 #### 1.1.3 Import Sıralaması
 
@@ -612,28 +500,68 @@ ALTER TABLE pitch_decks
 ```javascript
 // frontend/tailwind.config.js
 module.exports = {
-  content: ['./src/**/*.{js,ts,jsx,tsx,mdx}'],
+  content: [
+    './src/pages/**/*.{js,ts,jsx,tsx,mdx}',
+    './src/components/**/*.{js,ts,jsx,tsx,mdx}',
+    './src/app/**/*.{js,ts,jsx,tsx,mdx}',
+  ],
   theme: {
     extend: {
       colors: {
+        // Primary - Trust & Professionalism
+        primary: {
+          50: '#EEF2FF',
+          100: '#E0E7FF',
+          200: '#C7D2FE',
+          300: '#A5B4FC',
+          400: '#818CF8',
+          500: '#6366F1', // Main primary
+          600: '#4F46E5',
+          700: '#4338CA',
+          800: '#3730A3',
+          900: '#312E81',
+        },
+        // Secondary - Energy & Growth
+        secondary: {
+          50: '#ECFDF5',
+          100: '#D1FAE5',
+          200: '#A7F3D0',
+          300: '#6EE7B7',
+          400: '#34D399',
+          500: '#10B981', // Main secondary
+          600: '#059669',
+          700: '#047857',
+          800: '#065F46',
+          900: '#064E3B',
+        },
+        // Accent - Innovation & Creativity
         accent: {
-          baseline: '#A5683B',
-          DEFAULT: '#74492A',
-          subdued: 'rgba(116, 73, 42, 0.81)',
+          50: '#FDF4FF',
+          100: '#FAE8FF',
+          200: '#F5D0FE',
+          300: '#F0ABFC',
+          400: '#E879F9',
+          500: '#D946EF', // Main accent
+          600: '#C026D3',
+          700: '#A21CAF',
+          800: '#86198F',
+          900: '#701A75',
         },
-        canvas: '#FBF7F4',
-        neutral: {
-          DEFAULT: '#2D1C10',
-          subdued: 'rgba(45, 28, 16, 0.62)',
+        // Semantic Colors
+        success: '#10B981',
+        warning: '#F59E0B',
+        error: '#EF4444',
+        info: '#3B82F6',
+        // Fit Score Colors
+        fit: {
+          high: '#10B981',    // 80-100
+          medium: '#F59E0B',  // 50-79
+          low: '#EF4444',     // 0-49
         },
-        success: '#2E7D32',
-        warning: '#ED6C02',
-        error: '#D32F2F',
-        info: '#0288D1',
       },
       fontFamily: {
-        sans: ['Inter', '-apple-system', 'BlinkMacSystemFont', 'sans-serif'],
-        mono: ['JetBrains Mono', 'Fira Code', 'monospace'],
+        sans: ['Inter', 'system-ui', 'sans-serif'],
+        mono: ['JetBrains Mono', 'monospace'],
       },
     },
   },
@@ -809,50 +737,74 @@ DeckMate, network'ü zayıf startup'larla yatırımcıları güvenli ve veriye d
 
 ### 4.5 Deployment
 
-| Platform | Kullanım |
-|----------|----------|
-| Vercel | Frontend hosting |
-| Railway | Backend hosting |
-| Supabase Cloud | Database & Storage |
+| Platform | Servis | URL Pattern |
+|----------|--------|-------------|
+| Vercel | Frontend (Next.js) | `deckmate.vercel.app` |
+| Railway | Backend (FastAPI) | `deckmate-backend.railway.app` |
+| Railway | AI Service (FastAPI) | `deckmate-ai.railway.app` |
+| Supabase Cloud | Database & Storage | Supabase dashboard |
+
+**Railway Yapısı (Tek Hesap, Çoklu Servis):**
+```
+Railway Project: deckmate
+├── Service 1: backend    → Port 8000
+├── Service 2: ai         → Port 8001
+└── Environment Variables → Shared across services
+```
+
+**Free Tier Limitleri:**
+- Railway: 500 saat/ay (sleep mode ile hackathon için yeterli)
+- Vercel: Unlimited (hobby tier)
+- Supabase: 500MB DB, 1GB storage
 
 ---
 
 ## 5. Sistem Mimarisi
 
-### 5.1 Genel Mimari
+### 5.1 Genel Mimari (3 Ayrı Servis)
 
 ```
-┌─────────────────────────────────────────────────────────────────┐
-│                         CLIENT LAYER                            │
-│  ┌─────────────────────────────────────────────────────────┐   │
-│  │                    Next.js Frontend                      │   │
-│  │  ┌─────────────┐  ┌─────────────┐  ┌─────────────────┐  │   │
-│  │  │  Startup    │  │  Investor   │  │     Shared      │  │   │
-│  │  │  Dashboard  │  │  Dashboard  │  │   Components    │  │   │
-│  │  └─────────────┘  └─────────────┘  └─────────────────┘  │   │
-│  └─────────────────────────────────────────────────────────┘   │
-└─────────────────────────────────────────────────────────────────┘
-                              │
-                              ▼
-┌─────────────────────────────────────────────────────────────────┐
-│                         API LAYER                               │
-│  ┌─────────────────────────────────────────────────────────┐   │
-│  │                    FastAPI Backend                       │   │
-│  │  ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌────────────┐  │   │
-│  │  │  Auth    │ │ Startup  │ │ Investor │ │     AI     │  │   │
-│  │  │  Routes  │ │  Routes  │ │  Routes  │ │   Routes   │  │   │
-│  │  └──────────┘ └──────────┘ └──────────┘ └────────────┘  │   │
-│  └─────────────────────────────────────────────────────────┘   │
-└─────────────────────────────────────────────────────────────────┘
-                              │
-                              ▼
-┌─────────────────────────────────────────────────────────────────┐
-│                        DATA LAYER                               │
-│  ┌──────────────┐  ┌──────────────┐  ┌──────────────────────┐  │
-│  │   Supabase   │  │   Supabase   │  │     Gemini API       │  │
-│  │   PostgreSQL │  │   Storage    │  │     (AI Engine)      │  │
-│  └──────────────┘  └──────────────┘  └──────────────────────┘  │
-└─────────────────────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────────────────────┐
+│                              CLIENT LAYER                                 │
+│  ┌────────────────────────────────────────────────────────────────────┐  │
+│  │                    Next.js Frontend (Vercel)                        │  │
+│  │  ┌─────────────┐  ┌─────────────┐  ┌─────────────────┐             │  │
+│  │  │  Startup    │  │  Investor   │  │     Shared      │             │  │
+│  │  │  Dashboard  │  │  Dashboard  │  │   Components    │             │  │
+│  │  └─────────────┘  └─────────────┘  └─────────────────┘             │  │
+│  └────────────────────────────────────────────────────────────────────┘  │
+└──────────────────────────────────────────────────────────────────────────┘
+                                    │
+                    ┌───────────────┴───────────────┐
+                    ▼                               ▼
+┌──────────────────────────────┐    ┌──────────────────────────────┐
+│     BACKEND SERVICE          │    │     AI SERVICE               │
+│     (Railway :8000)          │    │     (Railway :8001)          │
+│  ┌────────────────────────┐  │    │  ┌────────────────────────┐  │
+│  │  FastAPI Backend       │  │───▶│  │  FastAPI AI            │  │
+│  │  ┌──────┐ ┌──────────┐ │  │    │  │  ┌──────┐ ┌─────────┐  │  │
+│  │  │ Auth │ │ Startup  │ │  │    │  │  │Analyze│ │Fit Score│  │  │
+│  │  │Routes│ │ Investor │ │  │    │  │  │Routes │ │ Routes  │  │  │
+│  │  └──────┘ │  Routes  │ │  │    │  │  └──────┘ └─────────┘  │  │
+│  │           └──────────┘ │  │    │  └────────────────────────┘  │
+│  └────────────────────────┘  │    └──────────────────────────────┘
+└──────────────────────────────┘                    │
+                │                                   ▼
+                ▼                    ┌──────────────────────────────┐
+┌──────────────────────────────┐    │        GEMINI API            │
+│         SUPABASE             │    │     (Google Cloud)           │
+│  ┌──────────┐ ┌───────────┐  │    └──────────────────────────────┘
+│  │PostgreSQL│ │  Storage  │  │
+│  │    DB    │ │  (Files)  │  │
+│  └──────────┘ └───────────┘  │
+└──────────────────────────────┘
+
+Service Communication:
+─────────────────────
+Frontend  → Backend:  API calls (REST)
+Backend   → AI:       Internal HTTP calls
+Backend   → Supabase: Database queries
+Frontend  → Supabase: Auth (client-side)
 ```
 
 ### 5.2 Frontend Routing Yapısı
@@ -1542,9 +1494,65 @@ POST   /api/ai/summarize-news            - Haber özeti (internal)
 
 ---
 
-## 8. Güvenlik Implementasyonu
+## 8. Güvenlik Stratejisi (Demo-Safe Mode)
 
-### 8.1 Deck Viewer Güvenliği
+> **ÖNEMLİ:** Hackathon MVP'si için "Demo-Safe" güvenlik stratejisi uygulanmaktadır.
+> Bu strateji, hızlı geliştirme ve minimum debug süresini hedefler.
+> Production'a geçişte bu bölüm tamamen revize edilmelidir.
+
+### 8.0 Demo-Safe Güvenlik Kuralları
+
+| Katman | Demo-Safe Ayar | Production'da |
+|--------|----------------|---------------|
+| **CORS** | `*` (wildcard) | Spesifik origin'ler |
+| **RLS** | Kapalı | Detaylı policy'ler |
+| **Auth** | Supabase Auth (basit) | Email verify + 2FA |
+| **Email Verification** | Kapalı | Açık |
+| **Rate Limiting** | Yok | Aktif |
+| **Input Validation** | Sadece file size | Tüm alanlar |
+
+#### Supabase Auth Ayarları (Demo için)
+```
+Supabase Dashboard > Authentication > Providers > Email:
+- Enable Email Signup: ON
+- Confirm Email: OFF (Demo için kapalı!)
+- Secure Email Change: OFF
+- Double confirm email changes: OFF
+```
+
+#### CORS Ayarları (Demo için)
+```python
+# backend/app/main.py ve ai/app/main.py
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # Demo: Wildcard
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+```
+
+#### RLS Durumu (Demo için)
+```sql
+-- Demo için RLS KAPALI
+-- Production'da aktif edilecek
+ALTER TABLE public.profiles DISABLE ROW LEVEL SECURITY;
+ALTER TABLE public.startups DISABLE ROW LEVEL SECURITY;
+ALTER TABLE public.investors DISABLE ROW LEVEL SECURITY;
+ALTER TABLE public.pitch_decks DISABLE ROW LEVEL SECURITY;
+ALTER TABLE public.fit_scores DISABLE ROW LEVEL SECURITY;
+ALTER TABLE public.saved_startups DISABLE ROW LEVEL SECURITY;
+```
+
+#### Neden Bu Strateji?
+1. **Hız:** Güvenlik debug'u zaman kaybı
+2. **Basitlik:** Daha az moving part = daha az hata
+3. **Demo Odaklı:** Jüri güvenlik test etmeyecek
+4. **Reversible:** Production'da kolayca aktif edilir
+
+---
+
+### 8.1 Deck Viewer Güvenliği (Basitleştirilmiş)
 
 #### Watermark Implementasyonu (CSS Overlay)
 
@@ -1629,7 +1637,13 @@ function generateDeckViewToken(params: DeckViewToken): string {
 }
 ```
 
-### 8.2 Row Level Security (RLS) Policies
+### 8.2 Row Level Security (RLS) - Production Reference
+
+> **NOT:** Demo-Safe mode'da RLS kapalıdır.
+> Aşağıdaki policy'ler production referansı içindir.
+
+<details>
+<summary>Production RLS Policies (Collapsed)</summary>
 
 ```sql
 -- Startup kendi profilini görebilir
@@ -1643,10 +1657,10 @@ CREATE POLICY "Users can update own startup" ON startups
 -- Yatırımcılar görünür startup'ları görebilir (teaser)
 CREATE POLICY "Investors can view visible startups" ON startups
     FOR SELECT USING (
-        visibility = 'public' 
+        visibility = 'public'
         OR (visibility = 'verified_only' AND EXISTS (
-            SELECT 1 FROM investors 
-            WHERE user_id = auth.uid() 
+            SELECT 1 FROM investors
+            WHERE user_id = auth.uid()
             AND verification_status = 'verified'
         ))
     );
@@ -1657,6 +1671,8 @@ CREATE POLICY "Deck views visible to startup owner" ON deck_views
         startup_id IN (SELECT id FROM startups WHERE user_id = auth.uid())
     );
 ```
+
+</details>
 
 ---
 
@@ -1986,34 +2002,53 @@ interface StartupTeaser {
 
 ### Supabase
 - [ ] Production project oluştur
-- [ ] Tüm tabloları migrate et
-- [ ] RLS policies aktif et
+- [ ] `database/migrations/001_initial_schema.sql` çalıştır
 - [ ] Storage bucket oluştur (pitch-decks)
-- [ ] Auth settings (email templates, redirect URLs)
+- [ ] Auth settings (redirect URLs: localhost + production)
 
-### Vercel
-- [ ] GitHub repo bağla
+### Vercel (Frontend)
+- [ ] GitHub repo bağla (`frontend/` klasörü)
+- [ ] Root Directory: `frontend`
 - [ ] Environment variables ekle
-- [ ] Custom domain (opsiyonel)
 
-### Railway
-- [ ] GitHub repo bağla
-- [ ] Python environment seç
-- [ ] Environment variables ekle
-- [ ] Auto-deploy aktif et
+### Railway (Backend + AI - Tek Hesap)
+```
+Railway Project: deckmate
+├── Service 1: backend
+│   ├── Source: GitHub repo
+│   ├── Root Directory: backend
+│   ├── Start Command: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+│   └── Environment: Python 3.11
+│
+└── Service 2: ai
+    ├── Source: GitHub repo
+    ├── Root Directory: ai
+    ├── Start Command: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    └── Environment: Python 3.11
+```
 
 ### Environment Variables
-```
-# Frontend (.env.local)
-NEXT_PUBLIC_SUPABASE_URL=
-NEXT_PUBLIC_SUPABASE_ANON_KEY=
-NEXT_PUBLIC_API_URL=
 
-# Backend (.env)
-SUPABASE_URL=
-SUPABASE_SERVICE_KEY=
-GEMINI_API_KEY=
-JWT_SECRET=
+**Frontend (.env.local):**
+```
+NEXT_PUBLIC_SUPABASE_URL=https://xxx.supabase.co
+NEXT_PUBLIC_SUPABASE_ANON_KEY=eyJxxx
+NEXT_PUBLIC_API_URL=https://deckmate-backend.railway.app
+NEXT_PUBLIC_AI_URL=https://deckmate-ai.railway.app
+```
+
+**Backend (.env):**
+```
+SUPABASE_URL=https://xxx.supabase.co
+SUPABASE_SERVICE_KEY=eyJxxx
+AI_SERVICE_URL=https://deckmate-ai.railway.app
+FRONTEND_URL=https://deckmate.vercel.app
+```
+
+**AI Service (.env):**
+```
+GEMINI_API_KEY=xxx
+BACKEND_URL=https://deckmate-backend.railway.app
 ```
 
 ---
