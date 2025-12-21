@@ -1,0 +1,69 @@
+# Pitch Deck Best Practices 2024
+Source: Multiple VC and Startup Sources
+
+## Key Structure & Content
+A pitch deck typically contains 10-20 slides, and must include:
+- The problem you are targeting
+- The solution your startup offers
+- Who it serves and how it adds value
+- The size of the market
+- Competitor landscape
+- Team
+
+A deck should average around 10-12 slides, which is enough if you stay focused on only the key insights.
+
+## Series A Specific Considerations
+For Series A specifically, lead with proven traction rather than just vision. Successful Series A decks diverge from Pre-Seed and Seed decks, emphasizing fewer Problem, Solution, Product, and Competition sections.
+
+For Series A, prior rounds have vetted infrastructure and logistics, so investors seek scalability and future positioning.
+
+## Essential Elements
+There are at least seven essential elements to any pitch deck:
+1. Define what problem you're solving with a short but clear statement
+2. Explain how your product can resolve that problem
+3. Why it differentiates from competitors
+4. Demonstrate the market size and growth potential
+5. Use relevant statistics from credible sources
+6. Show your team's capabilities
+7. Clear ask and use of funds
+
+## Design & Presentation Tips
+Think about how and where investors are likely to review your deck. They will typically open your deck on a smartphone traveling between meetings - they need to get a sense of what you're about quickly.
+
+Good design goes a long way:
+- Lay out each slide clearly
+- Balance copy and images
+- Consider hiring external designers for the pitch deck
+- Attempting to do this in-house has the potential to look amateurish
+
+## Practice & Preparation
+Nobody ever gave a killer presentation without practice. Those that practice give polished presentations, even when their business doesn't convince investors. Those that don't ruin their chances merely by the fact that they cannot properly communicate what could be an excellent investment.
+
+There are vital numbers that investors will want to know. Knowing the key numbers like the back of your hand demonstrates your readiness and competence.
+
+## Writing & Communication
+Venture investors review hundreds of pitch decks and do not have significant time to spend with any single one. The content within slides must be:
+- Concise and accessible
+- Direct and judicious in language
+- Only using enough words to ensure the key message
+- Avoid using industry acronyms or jargon
+
+## The Ask Slide
+Finish your deck with the ask:
+- How much money are you looking to raise?
+- Under what terms?
+- Show how you will use these funds (distribution pie chart)
+- Key objectives you plan to achieve with this funding (SMART goals)
+
+## Investor Targeting
+TechCrunch's 2024 Series A analysis shows the average successful process takes 12.5 weeks. Quality trumps quantity: target 20-30 investors who specifically match your sector, stage, and check size.
+
+## Quick Summary
+1. Keep it 10-12 slides
+2. Lead with traction for Series A
+3. Design matters - consider professionals
+4. Practice your delivery extensively
+5. Know your numbers cold
+6. Avoid jargon, be concise
+7. End with clear ask and use of funds
+8. Target right investors, quality over quantity

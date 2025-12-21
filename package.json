@@ -1,0 +1,12 @@
+{
+  "name": "pitchdrill",
+  "private": true,
+  "scripts": {
+    "dev:web": "pnpm --filter web dev",
+    "dev:api": "cd apps/api && source venv/bin/activate && uvicorn main:app --reload --port 8000",
+    "dev": "concurrently \"pnpm dev:web\" \"pnpm dev:api\""
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.2"
+  }
+}

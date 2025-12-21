@@ -1,0 +1,39 @@
+# Kevin Hale - How to Pitch Your Startup (YC Partner)
+Source: Y Combinator Startup School
+
+## What Is a Startup Idea?
+A startup idea is a hypothesis for why your company is gonna grow really quickly. That hypothesis must compose of three different parts: the problem, the solution, and the insight.
+
+## What Makes a Great Problem?
+A great problem is widespread, meaning it is big in numbers and many are affected by it. It is growing, meaning it is not going away. It is urgent, and it needs a solution quickly. It is really expensive, meaning you will get your share when solving it.
+
+## Lead with "What"
+In company descriptions, founders should "Lead with what. Not why or how." This means you should answer with clarity the three questions (what, problem, customer) and not venture further. The why and how gets in the way of clarity at this point.
+
+## Make It Legible
+Make it legible, make it simple, make it obvious. Legible ideas can be understood by people who know nothing about your business. Learn to talk clearly, quickly, efficiently with cofounders, users, investors, employees, and shareholders. Avoid ambiguity, complexity (intertwined ideas), and mystery (jargon). Use conversational words, no jargon, no preamble.
+
+## Key Questions to Answer
+Your pitch should answer: What are you making? What's the problem? Who is the customer?
+
+## The "X for Y" Formula
+Examples like "LinkedIn for next billion internet users" or "Dropbox synchronizes files from your/your friend's computers" work well. In the X for Y formula, X should be a household name, and Y should be a huge market.
+
+## Why Clarity Matters
+Reading 1000 applications in a Y Combinator application batch, the company whose description is simple, straightforward, and understandable in 60 seconds (what they do, what the problem is, and who are their customers) stands out. A clear idea is a foundation for growth. Grow by word-of-mouth. "Marketing and Advertising is the tax companies pay because they didn't make remarkable."
+
+## What YC Looks For
+YC evaluates three things:
+1) Do I understand the idea?
+2) Am I excited by the idea?
+3) Do I like the team?
+
+## Quick Tips Summary
+- Keep it simple and clear
+- 60 seconds to understand your pitch
+- Lead with WHAT you do
+- Use X for Y formula if applicable
+- Avoid jargon and complexity
+- Focus on: Problem + Solution + Customer
+- Make investors excited
+- Show you have a great team
