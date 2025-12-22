@@ -14,6 +14,16 @@ from services.live_audio_service import (
     get_or_create_session as get_or_create_live_session,
     close_session as close_live_session,
 )
+from services.qa_service import (
+    start_qa_session,
+    receive_qa_answer,
+    end_qa_session,
+    get_qa_session
+)
+from services.term_sheet_service import (
+    generate_term_sheet,
+    extract_session_metadata
+)
 from services.rag_service import search_similar
 from services.database import get_session_maker
 from models.session import Session
@@ -263,26 +273,144 @@ async def websocket_endpoint(websocket: WebSocket, session_id: str):
                     "notes_count": len(notes)
                 })
 
-            elif event == "answer_complete":
-                # Q&A answer received
-                answer = payload.get("answer", "")
-                question = payload.get("question", "")
+            elif event == "start_qa":
+                # Start Q&A phase
+                try:
+                    session_maker = get_session_maker()
+                    async with session_maker() as db:
+                        session = await db.get(Session, UUID(session_id))
+                        if not session:
+                            await manager.send_event(session_id, "error", {
+                                "message": "Session not found"
+                            })
+                            continue
 
-                # Save Q&A exchange
+                        # Get required data
+                        slide_contents = session.slide_contents or []
+                        pitch_transcript = session.pitch_transcript or ""
+                        investor_mode = session.investor_mode or "friendly"
+                        
+                        # Detect language
+                        language = "tr"
+                        if session.deck_analysis:
+                            language = session.deck_analysis.get("language", "tr")
+
+                        # Callbacks for Q&A events
+                        async def on_qa_question(qa_data: dict):
+                            """Handle when AI asks a question"""
+                            if qa_data.get("event") == "qa_complete":
+                                # Q&A completed
+                                await manager.send_event(session_id, "qa_complete", {
+                                    "questions_asked": qa_data.get("questions_asked", 0),
+                                    "founder_time_used": qa_data.get("founder_time_used", 0),
+                                    "qa_transcript": qa_data.get("qa_transcript", [])
+                                })
+                                
+                                # Update session status
+                                async with session_maker() as db2:
+                                    sess = await db2.get(Session, UUID(session_id))
+                                    if sess:
+                                        sess.qa_transcript = qa_data.get("qa_transcript", [])
+                                        sess.status = "council"
+                                        await db2.commit()
+                                
+                                await manager.send_event(session_id, "phase_change", {
+                                    "phase": "council"
+                                })
+                            else:
+                                # Question asked
+                                await manager.send_event(session_id, "qa_question", qa_data)
+
+                        async def on_qa_answer(qa_data: dict):
+                            """Handle when founder answers"""
+                            # Answer received, save to DB
+                            try:
+                                async with session_maker() as db2:
+                                    sess = await db2.get(Session, UUID(session_id))
+                                    if sess:
+                                        qa_list = sess.qa_transcript or []
+                                        qa_list.append(qa_data)
+                                        sess.qa_transcript = qa_list
+                                        await db2.commit()
+                            except Exception as e:
+                                print(f"[WS] Error saving Q&A answer: {e}")
+
+                        # Start Q&A session
+                        qa_session = await start_qa_session(
+                            session_id=session_id,
+                            slide_contents=slide_contents,
+                            pitch_transcript=pitch_transcript,
+                            investor_mode=investor_mode,
+                            language=language,
+                            founder_response_time=120,  # 2 minutes
+                            on_question=on_qa_question,
+                            on_answer=on_qa_answer
+                        )
+
+                        # Update session status
+                        session.status = "qa"
+                        await db.commit()
+
+                        # Notify client
+                        await manager.send_event(session_id, "phase_change", {
+                            "phase": "qa",
+                            "investor_mode": investor_mode
+                        })
+
+                except Exception as e:
+                    print(f"[WS] Error starting Q&A: {e}")
+                    await manager.send_event(session_id, "error", {
+                        "message": f"Q&A error: {str(e)}"
+                    })
+
+            elif event == "answer_complete":
+                # Q&A answer received from founder
+                answer_text = payload.get("answer", "")
+                answer_duration = payload.get("duration", 0)  # Duration in seconds
+
+                if answer_text:
+                    # Process answer through Q&A service
+                    processed = await receive_qa_answer(
+                        session_id=session_id,
+                        answer_text=answer_text,
+                        answer_duration=answer_duration
+                    )
+
+                    if not processed:
+                        # Fallback: save directly if Q&A session not active
+                        try:
+                            session_maker = get_session_maker()
+                            async with session_maker() as db:
+                                session = await db.get(Session, UUID(session_id))
+                                if session:
+                                    qa_list = session.qa_transcript or []
+                                    qa_list.append({
+                                        "answer": answer_text,
+                                        "duration": answer_duration
+                                    })
+                                    session.qa_transcript = qa_list
+                                    await db.commit()
+                        except Exception as e:
+                            print(f"[WS] Error saving Q&A answer (fallback): {e}")
+
+            elif event == "end_qa":
+                # Manually end Q&A session
+                await end_qa_session(session_id)
+                
+                # Update session status
                 try:
                     session_maker = get_session_maker()
                     async with session_maker() as db:
                         session = await db.get(Session, UUID(session_id))
                         if session:
-                            qa_list = session.qa_transcript or []
-                            qa_list.append({
-                                "question": question,
-                                "answer": answer
-                            })
-                            session.qa_transcript = qa_list
+                            session.status = "council"
                             await db.commit()
+                    
+                    await manager.send_event(session_id, "phase_change", {
+                        "phase": "council"
+                    })
                 except Exception as e:
-                    print(f"[WS] Error saving Q&A: {e}")
+                    print(f"[WS] Error ending Q&A: {e}")
 
             elif event == "start_council":
                 # Start council debate with 5 VC panelists
@@ -334,12 +462,59 @@ async def websocket_endpoint(websocket: WebSocket, session_id: str):
                                 try:
                                     result = await council.run()
 
+                                    # Generate term sheet or feedback report
+                                    term_sheet_data = None
+                                    try:
+                                        # Get session data for term sheet generation
+                                        async with session_maker() as db_temp:
+                                            sess_temp = await db_temp.get(Session, UUID(session_id))
+                                            if sess_temp and sess_temp.deck_analysis:
+                                                # Extract metadata
+                                                metadata = extract_session_metadata(sess_temp.deck_analysis)
+                                                
+                                                # Build council result dict
+                                                council_result_dict = {
+                                                    "decision": result.decision.value,
+                                                    "average_score": result.average_score,
+                                                    "votes": {
+                                                        k: {"score": v.score, "rationale": v.rationale}
+                                                        for k, v in result.votes.items()
+                                                    },
+                                                    "key_strengths": result.key_strengths,
+                                                    "key_concerns": result.key_concerns,
+                                                    "investor_ready_pool": result.investor_ready_pool
+                                                }
+                                                
+                                                # Detect language
+                                                lang = "tr"
+                                                if sess_temp.deck_analysis:
+                                                    lang = sess_temp.deck_analysis.get("language", "tr")
+                                                
+                                                # Generate term sheet
+                                                term_sheet_data = await generate_term_sheet(
+                                                    council_result=council_result_dict,
+                                                    deck_analysis=sess_temp.deck_analysis,
+                                                    language=lang,
+                                                    startup_name=metadata["startup_name"],
+                                                    stage=metadata["stage"],
+                                                    ask_amount=metadata["ask_amount"],
+                                                    sector=metadata["sector"]
+                                                )
+                                    except Exception as e:
+                                        print(f"[WS] Error generating term sheet: {e}")
+                                        term_sheet_data = None
+
+                                    # Build verdict with term sheet
+                                    verdict_data = council.get_verdict()
+                                    if term_sheet_data:
+                                        verdict_data["term_sheet"] = term_sheet_data
+
                                     # Save to database
                                     async with session_maker() as db2:
                                         sess = await db2.get(Session, UUID(session_id))
                                         if sess:
                                             sess.council_dialog = council.get_dialog()
-                                            sess.verdict = council.get_verdict()
+                                            sess.verdict = verdict_data
                                             sess.final_score = int(result.average_score)
                                             sess.status = "completed"
                                             await db2.commit()
@@ -366,7 +541,8 @@ async def websocket_endpoint(websocket: WebSocket, session_id: str):
                                         {
                                             "final_score": int(result.average_score),
                                             "decision": result.decision.value,
-                                            "verdict_url": f"/verdict/{session_id}"
+                                            "verdict_url": f"/verdict/{session_id}",
+                                            "has_term_sheet": term_sheet_data is not None
                                         }
                                     )
 
