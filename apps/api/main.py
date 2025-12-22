@@ -13,26 +13,26 @@ from services.gemini_service import init_gemini
 async def lifespan(app: FastAPI):
     """Startup and shutdown events"""
     # Startup
-    print("🚀 Starting PitchDrill API...")
+    print("[START] Starting PitchDrill API...")
 
     # Initialize Gemini
     try:
         init_gemini()
-        print("✅ Gemini AI initialized")
+        print("[OK] Gemini AI initialized")
     except Exception as e:
-        print(f"⚠️ Gemini initialization failed: {e}")
+        print(f"[WARN] Gemini initialization failed: {e}")
 
     # Initialize Database
     try:
         await init_db()
     except Exception as e:
-        print(f"⚠️ Database connection failed: {e}")
+        print(f"[WARN] Database connection failed: {e}")
         print("   Continuing without database...")
 
     yield
 
     # Shutdown
-    print("👋 Shutting down PitchDrill API...")
+    print("[STOP] Shutting down PitchDrill API...")
     await close_db()
 
 
