@@ -287,13 +287,7 @@ async def websocket_endpoint(websocket: WebSocket, session_id: str):
                 await manager.send_event(session_id, "reconnected", reconnect_data)
                 continue
 
-        # Main event loop
-        while True:
-            data = await websocket.receive_json()
-            event = data.get("event")
-            payload = data.get("data", {})
-
-            if event == "audio_chunk":
+            elif event == "audio_chunk":
                 # Decode and send audio to Gemini Live
                 audio_b64 = payload.get("audio", "")
                 if audio_b64:
@@ -310,8 +304,9 @@ async def websocket_endpoint(websocket: WebSocket, session_id: str):
                 })
 
             elif event == "end_pitch":
-                # Cancel response listener
-                response_task.cancel()
+                # Cancel response listener (if exists)
+                if response_task:
+                    response_task.cancel()
 
                 # Get transcript from live session
                 transcript = live_session.get_transcript()
