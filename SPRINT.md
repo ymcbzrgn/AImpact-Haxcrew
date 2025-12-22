@@ -296,30 +296,34 @@ DEMO       ░░░░░░░░░░░░░░░░░░░░░░░
 
 # M3 → M4: Q&A + Council
 
-## 20. Q&A Prompt
+## 20. Q&A Prompt ✅ TAMAMLANDI
 
 | # | Subtask | Owner | Status |
 |---|---------|-------|--------|
-| 20.1 | Base prompt | Sinem | 🧪 |
-| 20.2 | Shark mode | Sinem | 🧪 |
-| 20.3 | Friendly mode | Sinem | 🧪 |
-| 20.4 | Analyst mode | Sinem | 🧪 |
-| 20.5 | Context injection | Sinem | ⬜ |
+| 20.1 | Base prompt | Sinem | ✅ |
+| 20.2 | Shark mode | Sinem | ✅ |
+| 20.3 | Friendly mode | Sinem | ✅ |
+| 20.4 | Analyst mode | Sinem | ✅ |
+| 20.5 | Context injection | Sinem | ✅ |
 | 20.6 | Test | Melisa | ⬜ |
 
-> ⚠️ PROMPTS.md'de metin var (1174-1779 satır), **Python prompt dosyası YOK**, backend entegrasyonu YOK.
+> ✅ `prompts/qa_investor.py` - Base prompt + 3 mode (Shark, Friendly, Analyst) + context builder. 559 satır.
 
-## 21. AI Asks Questions ❌ YAPILMADI
+## 21. AI Asks Questions ✅ BACKEND TAMAMLANDI
 
 | # | Subtask | Owner | Status |
 |---|---------|-------|--------|
-| 21.1 | Question generation | Sinem | ⬜ |
-| 21.2 | TTS output | Sinem | ⬜ |
-| 21.3 | WebSocket event | Nisa | ⬜ |
-| 21.4 | Answer capture | Sinem | ⬜ |
-| 21.5 | Q&A transcript | Nisa | ⬜ |
-| 21.6 | Follow-up logic | Sinem | ⬜ |
+| 21.1 | Question generation | Sinem | ✅ |
+| 21.2 | TTS output | Sinem | ✅ |
+| 21.3 | WebSocket event | Nisa | ✅ |
+| 21.4 | Answer capture | Sinem | ✅ |
+| 21.5 | Q&A transcript | Nisa | ✅ |
+| 21.6 | Follow-up logic | Sinem | ✅ |
 | 21.7 | Q&A UI | Bartın | ⬜ |
+
+> ✅ `services/qa_service.py` - QASession class, Gemini Live entegrasyonu, soru üretimi, time tracking. 340 satır.
+> ✅ `routers/websocket.py` - start_qa, answer_complete, end_qa event'leri entegre edildi.
+> ⚠️ **Frontend UI eksik** - Backend hazır, Bartın UI yapacak.
 
 ## 22. Council Character Prompts ✅ TAMAMLANDI
 
@@ -367,8 +371,8 @@ DEMO       ░░░░░░░░░░░░░░░░░░░░░░░
 
 ### M4 Checkpoint
 
-- [ ] AI soru sorabiliyor (Q&A ⬜)
-- [ ] Cevaplar kaydediliyor (Q&A ⬜)
+- [x] AI soru sorabiliyor ✅ (backend - Q&A service hazır)
+- [x] Cevaplar kaydediliyor ✅ (backend - WebSocket entegre)
 - [x] 5 karakter konuşuyor ✅ (backend)
 - [x] Oylama çalışıyor ✅ (backend)
 
@@ -376,17 +380,19 @@ DEMO       ░░░░░░░░░░░░░░░░░░░░░░░
 
 # M4 → M5: Verdict + Polish
 
-## 25. Term Sheet Generator
+## 25. Term Sheet Generator ✅ TAMAMLANDI
 
 | # | Subtask | Owner | Status |
 |---|---------|-------|--------|
-| 25.1 | Term sheet prompt | Sinem | 🧪 |
-| 25.2 | INVEST → term sheet | Sinem | 🧪 |
-| 25.3 | PASS → feedback | Sinem | 🧪 |
-| 25.4 | Output format | Sinem | 🧪 |
-| 25.5 | Verdict DB | Nisa | ⬜ |
+| 25.1 | Term sheet prompt | Sinem | ✅ |
+| 25.2 | INVEST → term sheet | Sinem | ✅ |
+| 25.3 | PASS → feedback | Sinem | ✅ |
+| 25.4 | Output format | Sinem | ✅ |
+| 25.5 | Verdict DB | Nisa | ✅ |
 
-> ⚠️ PROMPTS.md'de metin var (2776-3400+ satır), **Python prompt dosyası YOK**, generator YOK.
+> ✅ `prompts/term_sheet.py` - Term Sheet Generator + Pass Feedback prompts, valuation logic, helper functions. 483 satır.
+> ✅ `services/term_sheet_service.py` - generate_term_sheet function, council result'dan otomatik üretim, fallback mekanizması.
+> ✅ `routers/websocket.py` - Council tamamlandığında otomatik term sheet üretimi ve verdict'e ekleme.
 
 ## 26. Verdict UI ❌ YAPILMADI (BACKEND HAZIR)
 
@@ -456,14 +462,18 @@ DEMO       ░░░░░░░░░░░░░░░░░░░░░░░
 | |   |-- deck_analyzer.py .............. OK PDF/PPTX + AI       |
 | |   |-- rag_service.py ................ OK Vector search       |
 | |   |-- live_audio_service.py ......... OK Gemini Live         |
-| |   +-- council_service.py ............ OK 5 VC Panel (YENi)   |
+| |   |-- council_service.py ............ OK 5 VC Panel          |
+| |   |-- qa_service.py ................. OK Q&A Session (YENi)  |
+| |   +-- term_sheet_service.py ......... OK Term Sheet Gen (YENi)|
 | |-- routers/                                                   |
 | |   |-- session.py .................... OK CRUD + Upload       |
-| |   +-- websocket.py .................. OK Full + Council      |
+| |   +-- websocket.py .................. OK Full + Q&A + Council |
 | |-- prompts/                                                   |
 | |   |-- deck_analysis.py .............. OK                     |
 | |   |-- realtime_notes.py ............. OK                     |
-| |   +-- council_characters.py ......... OK 5 karakter (YENi)   |
+| |   |-- council_characters.py ......... OK 5 karakter          |
+| |   |-- qa_investor.py ................ OK 3 mode (YENi)       |
+| |   +-- term_sheet.py ................. OK Generator (YENi)    |
 | |-- models/                                                    |
 | |   |-- session.py .................... OK + council fields    |
 | |   +-- rag_document.py ............... OK RAG model           |
@@ -480,8 +490,8 @@ DEMO       ░░░░░░░░░░░░░░░░░░░░░░░
 | |-- Deck Analysis prompt .............. OK Python'a tasindi    |
 | |-- Realtime Notes prompt ............. OK Python'a tasindi    |
 | |-- Council character prompts ......... OK Python'a tasindi    |
-| |-- Q&A mode prompts .................. KOD VAR, entegre degil |
-| +-- Term sheet templates .............. KOD VAR, entegre degil |
+| |-- Q&A mode prompts .................. OK Python'a tasindi (YENi)|
+| +-- Term sheet templates .............. OK Python'a tasindi (YENi)|
 +================================================================+
 | VPS (31.40.198.69)                                             |
 | |-- PostgreSQL 16 + pgvector .......... OK Calisiyor           |
@@ -531,16 +541,16 @@ DEMO       ░░░░░░░░░░░░░░░░░░░░░░░
 | Owner | Toplam | Done | Kod Var | Kalan |
 |-------|--------|------|---------|-------|
 | Yamac | 55 | 50 | 0 | 5 |
-| Nisa | 22 | 10 | 0 | 12 |
+| Nisa | 22 | 11 | 0 | 11 |
 | Bekir | 0 | 0 | 0 | 0 |
 | Bartin | 32 | 0 | 0 | 32 |
-| Sinem | 35 | 5 | 8 | 22 |
+| Sinem | 35 | 17 | 0 | 18 |
 | Melisa | 14 | 0 | 0 | 14 |
-| **TOTAL** | **158** | **65** | **8** | **85** |
+| **TOTAL** | **158** | **78** | **0** | **80** |
 
-> **Degisiklik:** Yamac +18 test yazdi, council E2E tamamladi
+> **Degisiklik:** Sinem Q&A ve Term Sheet backend'i tamamladi (+12 done)
 > **Not:** Bekir assign edilmemis - Bartin tum frontend'i ustlendi.
-> **KOD VAR = PROMPTS.md'de metin var ama Python kodu/entegrasyonu yok**
+> **KOD VAR = 0** - Tüm prompt'lar Python'a taşındı ve entegre edildi!
 
 ---
 
@@ -565,9 +575,10 @@ EN AZ BUNLAR LAZIM:
 | 2 | `/session/[id]` page + audio | Bartin | #1 | KRITIK |
 | 3 | `/council` page | Bartin | - | YUKSEK |
 | 4 | `/verdict/[id]` page | Bartin | - | YUKSEK |
-| 5 | Q&A prompts -> Python | Sinem | - | ORTA |
-| 6 | Term sheet generator | Sinem | - | ORTA |
-| 7 | Deployment | Yamac | #1-4 | SON |
+| 5 | ~~Q&A prompts -> Python~~ | Sinem | ✅ | TAMAMLANDI |
+| 6 | ~~Term sheet generator~~ | Sinem | ✅ | TAMAMLANDI |
+| 7 | Q&A E2E test | Melisa | - | ORTA |
+| 8 | Deployment | Yamac | #1-4 | SON |
 
 ---
 
@@ -597,10 +608,11 @@ EN AZ BUNLAR LAZIM:
 
 ```
 BACKEND EKSIKLERI:
-- Q&A prompts Python'a tasinmadi
-- Term sheet generator yok
+- ~~Q&A prompts Python'a tasinmadi~~ ✅ TAMAMLANDI
+- ~~Term sheet generator yok~~ ✅ TAMAMLANDI
 - WebSocket E2E test yok (gercek WS baglantisi)
 - Full council flow test yok (8-15 exchange)
+- Q&A E2E test yok (gercek Gemini Live ile)
 
 FRONTEND EKSIKLERI:
 - /upload sayfasi YOK
@@ -634,13 +646,36 @@ E2E TEST SONUCU:
 [orchestrator]: "Alright team, we just saw PayFlow..."
 [elif_yilmaz]: "The market pain is real—especially in Turkey..."
 >>> COUNCIL DEBATE CALISIYOR! <<<
+
+SINEM TAMAMLADI:
+1. Q&A Investor Prompts (prompts/qa_investor.py) - 559 satir
+   - Base prompt + 3 mode (Shark, Friendly, Analyst)
+   - Context builder ve helper fonksiyonlar
+2. Q&A Service (services/qa_service.py) - 340 satir
+   - QASession class, Gemini Live entegrasyonu
+   - Soru üretimi, time tracking, transcript yönetimi
+3. Term Sheet Generator Prompts (prompts/term_sheet.py) - 483 satir
+   - Term Sheet Generator + Pass Feedback prompts
+   - Valuation logic, status banner, helper functions
+4. Term Sheet Service (services/term_sheet_service.py) - 250+ satir
+   - generate_term_sheet function
+   - Council result'dan otomatik üretim
+   - Fallback mekanizması
+5. WebSocket Q&A Handler (routers/websocket.py) - Güncellendi
+   - start_qa, answer_complete, end_qa event'leri
+   - Q&A akışı tam entegre
+6. WebSocket Term Sheet Integration
+   - Council tamamlandığında otomatik term sheet üretimi
+   - Verdict'e term sheet ekleme
+
+>>> Q&A VE TERM SHEET BACKEND TAMAMLANDI! <<<
 ```
 
 ---
 
-*Son guncelleme: 2025-12-22 04:30*
-*Gercek ilerleme: ~42% (65/155 done, 8 kod var ama entegre degil)*
-*Backend: ~59% | Frontend: ~5% (0% functional) | Prompts: ~60% | Tests: 116 passed, 3 skipped*
+*Son guncelleme: 2025-12-22 20.30 (güncel)*
+*Gercek ilerleme: ~49% (78/158 done, 0 kod var - hepsi entegre!)*
+*Backend: ~70% | Frontend: ~5% (0% functional) | Prompts: ~100% | Tests: 116 passed, 3 skipped*
 
 ---
 
@@ -653,7 +688,8 @@ E2E TEST SONUCU:
 | Frontend: ~5% | ~5% (0% functional) | Dogru ama yaniltici |
 
 **Eksik Backend Parcalari:**
-- Q&A Mode: Prompt var, Python kodu YOK
-- Term Sheet Generator: Template var, service YOK
-- Verdict Generation: Endpoint var, generator YOK
+- ~~Q&A Mode: Prompt var, Python kodu YOK~~ ✅ TAMAMLANDI
+- ~~Term Sheet Generator: Template var, service YOK~~ ✅ TAMAMLANDI
+- ~~Verdict Generation: Endpoint var, generator YOK~~ ✅ TAMAMLANDI (otomatik üretim)
 - Deployment: %0
+- Frontend: %5 (sadece boilerplate)
