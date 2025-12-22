@@ -304,12 +304,12 @@ async def get_verdict(
     )
 
 
-@router.get("/session/{session_id}/analysis")
-async def get_analysis(
+@router.get("/session/{session_id}/transcript")
+async def get_transcript(
     session_id: str,
     db: AsyncSession = Depends(get_db)
 ):
-    """Get deck analysis result (with polling support)"""
+    """Get pitch transcript, Q&A transcript, and realtime notes"""
 
     try:
         result = await db.execute(
@@ -325,23 +325,24 @@ async def get_analysis(
             error={"code": "SESSION_NOT_FOUND", "message": "Session not found"}
         )
 
-    # Check if analysis is still processing
-    if session.status == "processing":
-        return SessionResponse(
-            success=True,
-            data={
-                "session_id": str(session.id),
-                "status": "processing",
-                "message": "Analysis in progress, please poll again"
-            }
-        )
+    # Parse transcripts from JSON strings
+    pitch_transcript = []
+    qa_transcript = session.qa_transcript or []
+    realtime_notes = session.realtime_notes or []
+
+    try:
+        if session.pitch_transcript:
+            pitch_transcript = json.loads(session.pitch_transcript)
+    except json.JSONDecodeError:
+        pitch_transcript = []
 
     return SessionResponse(
         success=True,
         data={
             "session_id": str(session.id),
             "status": session.status,
-            "deck_analysis": session.deck_analysis,
-            "slide_contents": session.slide_contents
+            "pitch_transcript": pitch_transcript,
+            "qa_transcript": qa_transcript,
+            "realtime_notes": realtime_notes
         }
     )

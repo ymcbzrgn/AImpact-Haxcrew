@@ -16,22 +16,30 @@ from datetime import datetime
 
 
 async def extract_text_from_pdf(file_bytes: bytes) -> List[Dict]:
-    """Extract text from PDF file"""
+    """Extract text from PDF file with enhanced OCR"""
     slides = []
     doc = fitz.open(stream=file_bytes, filetype="pdf")
 
     for page_num, page in enumerate(doc):
         text = page.get_text()
 
-        # If no text found, try OCR
-        if not text.strip():
-            pix = page.get_pixmap()
+        # Always try OCR for better accuracy, especially for image-heavy slides
+        ocr_text = ""
+        try:
+            pix = page.get_pixmap(dpi=300)  # Higher DPI for better OCR
             img = Image.open(io.BytesIO(pix.tobytes()))
-            text = pytesseract.image_to_string(img)
+            ocr_text = pytesseract.image_to_string(img).strip()
+        except Exception as e:
+            print(f"[PDF] OCR failed for page {page_num + 1}: {e}")
+
+        # Merge text and OCR results intelligently
+        combined_text = _merge_text_and_ocr(text, ocr_text)
 
         slides.append({
             "slide_number": page_num + 1,
-            "content": text.strip()
+            "content": combined_text,
+            "text_source": "pdf" if text.strip() else "ocr",
+            "has_ocr": bool(ocr_text)
         })
 
     doc.close()
@@ -39,19 +47,44 @@ async def extract_text_from_pdf(file_bytes: bytes) -> List[Dict]:
 
 
 async def extract_text_from_pptx(file_bytes: bytes) -> List[Dict]:
-    """Extract text from PPTX file"""
+    """Extract text from PPTX file with enhanced image/OCR support"""
     slides = []
     prs = Presentation(io.BytesIO(file_bytes))
 
     for slide_num, slide in enumerate(prs.slides):
         text_parts = []
+        ocr_texts = []
+
+        # Extract text from shapes
         for shape in slide.shapes:
-            if hasattr(shape, "text"):
+            if hasattr(shape, "text") and shape.text.strip():
                 text_parts.append(shape.text)
+
+        # Extract images and run OCR
+        for shape in slide.shapes:
+            if hasattr(shape, "image") and shape.image:
+                try:
+                    # Get image bytes
+                    image_bytes = shape.image.blob
+                    img = Image.open(io.BytesIO(image_bytes))
+                    ocr_result = pytesseract.image_to_string(img).strip()
+                    if ocr_result:
+                        ocr_texts.append(ocr_result)
+                except Exception as e:
+                    print(f"[PPTX] OCR failed for slide {slide_num + 1}: {e}")
+
+        # Combine text and OCR results
+        combined_text = "\n".join(text_parts).strip()
+        ocr_combined = "\n".join(ocr_texts).strip()
+
+        # Merge intelligently
+        final_text = _merge_text_and_ocr(combined_text, ocr_combined)
 
         slides.append({
             "slide_number": slide_num + 1,
-            "content": "\n".join(text_parts).strip()
+            "content": final_text,
+            "text_source": "pptx" if combined_text else "ocr",
+            "has_ocr": bool(ocr_combined)
         })
 
     return slides
@@ -64,7 +97,9 @@ async def extract_text_from_image(file_bytes: bytes) -> List[Dict]:
 
     return [{
         "slide_number": 1,
-        "content": text.strip()
+        "content": text.strip(),
+        "text_source": "ocr",
+        "has_ocr": True
     }]
 
 
@@ -80,6 +115,39 @@ async def extract_slides(file_bytes: bytes, file_ext: str) -> List[Dict]:
         return await extract_text_from_image(file_bytes)
     else:
         raise ValueError(f"Unsupported file format: {file_ext}")
+
+
+def _merge_text_and_ocr(pdf_text: str, ocr_text: str) -> str:
+    """Intelligently merge PDF text extraction with OCR results"""
+    pdf_text = pdf_text.strip()
+    ocr_text = ocr_text.strip()
+
+    # If PDF has text and OCR doesn't, use PDF
+    if pdf_text and not ocr_text:
+        return pdf_text
+
+    # If OCR has text and PDF doesn't, use OCR
+    if ocr_text and not pdf_text:
+        return ocr_text
+
+    # If both have text, compare and choose the better one
+    if pdf_text and ocr_text:
+        # Simple heuristic: prefer the longer text, but check for OCR artifacts
+        pdf_words = len(pdf_text.split())
+        ocr_words = len(ocr_text.split())
+
+        # If OCR has significantly more words, it might be better
+        if ocr_words > pdf_words * 1.5:
+            return ocr_text
+        # If PDF has more words, use PDF
+        elif pdf_words > ocr_words:
+            return pdf_text
+        # If similar length, prefer PDF (usually more accurate)
+        else:
+            return pdf_text
+
+    # Fallback
+    return pdf_text or ocr_text or ""
 
 
 def _clean_json_response(response: str) -> str:

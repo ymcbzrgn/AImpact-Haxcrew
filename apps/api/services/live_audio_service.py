@@ -61,6 +61,21 @@ class LiveAudioSession:
             audio=types.Blob(data=audio_chunk, mime_type="audio/pcm")
         )
 
+    def add_user_transcript(self, text: str, timestamp: int = 0):
+        """
+        Add user speech to transcript (when STT is available)
+
+        Args:
+            text: Transcribed user speech
+            timestamp: Timestamp in seconds
+        """
+        if text.strip():
+            self.transcript.append({
+                "role": "user",
+                "text": text.strip(),
+                "timestamp": timestamp
+            })
+
     async def send_text(self, text: str):
         """
         Send text input to Gemini Live

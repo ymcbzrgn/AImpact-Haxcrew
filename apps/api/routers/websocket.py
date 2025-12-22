@@ -31,31 +31,61 @@ class ConnectionManager:
     def __init__(self):
         self.active_connections: Dict[str, WebSocket] = {}
         self.realtime_notes: Dict[str, list] = {}  # Track notes per session
+        self.session_states: Dict[str, dict] = {}  # Track session state for reconnection
 
     async def connect(self, session_id: str, websocket: WebSocket):
         await websocket.accept()
         self.active_connections[session_id] = websocket
-        self.realtime_notes[session_id] = []
+        if session_id not in self.realtime_notes:
+            self.realtime_notes[session_id] = []
 
     def disconnect(self, session_id: str):
         if session_id in self.active_connections:
             del self.active_connections[session_id]
-        if session_id in self.realtime_notes:
-            del self.realtime_notes[session_id]
+        # Keep notes and session state for potential reconnection
+
+    async def reconnect(self, session_id: str, websocket: WebSocket) -> dict:
+        """Handle reconnection to existing session"""
+        await websocket.accept()
+        self.active_connections[session_id] = websocket
+
+        # Return current session state for client to catch up
+        state = self.session_states.get(session_id, {})
+        notes = self.realtime_notes.get(session_id, [])
+
+        return {
+            "session_id": session_id,
+            "status": "reconnected",
+            "notes": notes,
+            "phase": state.get("phase", "pitch"),
+            "elapsed_seconds": state.get("elapsed_seconds", 0)
+        }
 
     async def send_event(self, session_id: str, event: str, data: dict):
         if session_id in self.active_connections:
-            await self.active_connections[session_id].send_json({
-                "event": event,
-                "data": data
-            })
+            try:
+                await self.active_connections[session_id].send_json({
+                    "event": event,
+                    "data": data
+                })
+            except Exception as e:
+                print(f"[WS] Error sending event {event}: {e}")
+                # Client might have disconnected, but don't remove yet
 
     def add_note(self, session_id: str, note: dict):
-        if session_id in self.realtime_notes:
-            self.realtime_notes[session_id].append(note)
+        if session_id not in self.realtime_notes:
+            self.realtime_notes[session_id] = []
+        self.realtime_notes[session_id].append(note)
 
     def get_notes(self, session_id: str) -> list:
         return self.realtime_notes.get(session_id, [])
+
+    def update_session_state(self, session_id: str, state: dict):
+        """Update session state for reconnection handling"""
+        self.session_states[session_id] = state
+
+    def get_session_state(self, session_id: str) -> dict:
+        return self.session_states.get(session_id, {})
 
 
 manager = ConnectionManager()
@@ -174,48 +204,78 @@ async def websocket_endpoint(websocket: WebSocket, session_id: str):
             - audio_chunk: {audio: base64, timestamp: int}
             - end_pitch: {}
             - answer_complete: {answer: str}
+            - reconnect: {} (for reconnection)
 
         Server -> Client:
             - connected: {session_id, status}
+            - reconnected: {session_id, status, notes, phase, elapsed_seconds}
             - realtime_note: {note, type, timestamp}
             - ai_speaking: {audio: base64, mime_type}
             - phase_change: {phase: "qa" | "council" | "verdict"}
             - error: {message}
     """
-    await manager.connect(session_id, websocket)
+    # Check if this is a reconnection
+    is_reconnection = session_id in manager.active_connections
+
+    if is_reconnection:
+        # Handle reconnection
+        reconnect_data = await manager.reconnect(session_id, websocket)
+        await manager.send_event(session_id, "reconnected", reconnect_data)
+    else:
+        # New connection
+        await manager.connect(session_id, websocket)
+
     live_session = None
     elapsed_seconds = 0
 
     try:
-        # Build context and start Gemini Live session
-        system_prompt, deck_analysis = await build_session_context(session_id)
+        # Build context and start Gemini Live session (only for new connections)
+        if not is_reconnection:
+            system_prompt, deck_analysis = await build_session_context(session_id)
 
-        live_session = await get_or_create_live_session(
-            session_id=session_id,
-            system_instruction=system_prompt
-        )
+            live_session = await get_or_create_live_session(
+                session_id=session_id,
+                system_instruction=system_prompt
+            )
 
-        # Send connection confirmation
-        await manager.send_event(session_id, "connected", {
-            "session_id": session_id,
-            "status": "ready",
-            "has_deck_analysis": deck_analysis is not None
-        })
+            # Send connection confirmation
+            await manager.send_event(session_id, "connected", {
+                "session_id": session_id,
+                "status": "ready",
+                "has_deck_analysis": deck_analysis is not None
+            })
 
-        # Start response listener task
-        async def listen_for_responses():
-            nonlocal elapsed_seconds
-            try:
-                async for response in live_session.receive_responses():
-                    await process_gemini_response(
-                        session_id,
-                        response,
-                        elapsed_seconds
-                    )
-            except Exception as e:
-                print(f"[WS] Response listener error: {e}")
+            # Start response listener task
+            async def listen_for_responses():
+                nonlocal elapsed_seconds
+                try:
+                    async for response in live_session.receive_responses():
+                        await process_gemini_response(
+                            session_id,
+                            response,
+                            elapsed_seconds
+                        )
+                except Exception as e:
+                    print(f"[WS] Response listener error: {e}")
 
-        response_task = asyncio.create_task(listen_for_responses())
+            response_task = asyncio.create_task(listen_for_responses())
+        else:
+            # For reconnection, get current state
+            current_state = manager.get_session_state(session_id)
+            elapsed_seconds = current_state.get("elapsed_seconds", 0)
+            response_task = None  # Will be handled by existing session
+
+        # Main event loop
+        while True:
+            data = await websocket.receive_json()
+            event = data.get("event")
+            payload = data.get("data", {})
+
+            if event == "reconnect":
+                # Client explicitly requesting reconnection state
+                reconnect_data = await manager.reconnect(session_id, websocket)
+                await manager.send_event(session_id, "reconnected", reconnect_data)
+                continue
 
         # Main event loop
         while True:
@@ -232,6 +292,12 @@ async def websocket_endpoint(websocket: WebSocket, session_id: str):
 
                 # Update elapsed time
                 elapsed_seconds = payload.get("timestamp", elapsed_seconds)
+
+                # Update session state
+                manager.update_session_state(session_id, {
+                    "phase": "pitch",
+                    "elapsed_seconds": elapsed_seconds
+                })
 
             elif event == "end_pitch":
                 # Cancel response listener
