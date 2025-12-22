@@ -4,6 +4,25 @@
 
 ---
 
+## ⚠️ HAM GERÇEKLER - 2025-12-23 DENETİM SONUCU
+
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│  🔴 KRİTİK: 3 DOSYA TAMAMEN BOŞ - SİSTEM ÇALIŞMAZ DURUMDA          │
+│                                                                      │
+│  ❌ apps/api/services/term_sheet_service.py  → 1 SATIR (BOŞ)       │
+│  ❌ apps/api/prompts/deck_analysis.py        → 1 SATIR (BOŞ)       │
+│  ❌ apps/api/prompts/qa_investor.py          → 1 SATIR (BOŞ)       │
+│                                                                      │
+│  Bu dosyalar olmadan:                                                │
+│  - Deck analysis ÇALIŞMAZ (import fail)                             │
+│  - Q&A session ÇALIŞMAZ (import fail)                               │
+│  - Term sheet generation ÇALIŞMAZ (service yok)                     │
+└─────────────────────────────────────────────────────────────────────┘
+```
+
+---
+
 ## Timeline
 
 ```
@@ -29,6 +48,7 @@ DEMO       ░░░░░░░░░░░░░░░░░░░░░░░
 ⬜ TODO
 ❌ BLOCKED
 ⏭️ SKIP (MVP'de yok)
+🔴 BOŞ DOSYA (dosya var ama içi boş - KRİTİK)
 ```
 
 ---
@@ -448,148 +468,191 @@ DEMO       ░░░░░░░░░░░░░░░░░░░░░░░
 
 ---
 
-# Mevcut Durum Ozeti
+# Mevcut Durum Özeti - HAM GERÇEKLER
 
 ```
-+================================================================+
-|                    GERCEK DURUM                                |
-+================================================================+
-| BACKEND (apps/api)                                             |
-| |-- main.py ............................ OK Calisiyor          |
-| |-- services/                                                  |
-| |   |-- database.py ................... OK PostgreSQL async    |
-| |   |-- gemini_service.py ............. OK Text + Embed + Pro  |
-| |   |-- deck_analyzer.py .............. OK PDF/PPTX + AI       |
-| |   |-- rag_service.py ................ OK Vector search       |
-| |   |-- live_audio_service.py ......... OK Gemini Live         |
-| |   |-- council_service.py ............ OK 5 VC Panel          |
-| |   |-- qa_service.py ................. OK Q&A Session (YENi)  |
-| |   +-- term_sheet_service.py ......... OK Term Sheet Gen (YENi)|
-| |-- routers/                                                   |
-| |   |-- session.py .................... OK CRUD + Upload       |
-| |   +-- websocket.py .................. OK Full + Q&A + Council |
-| |-- prompts/                                                   |
-| |   |-- deck_analysis.py .............. OK                     |
-| |   |-- realtime_notes.py ............. OK                     |
-| |   |-- council_characters.py ......... OK 5 karakter          |
-| |   |-- qa_investor.py ................ OK 3 mode (YENi)       |
-| |   +-- term_sheet.py ................. OK Generator (YENi)    |
-| |-- models/                                                    |
-| |   |-- session.py .................... OK + council fields    |
-| |   +-- rag_document.py ............... OK RAG model           |
-| +-- scripts/seed_rag.py ............... OK 8 chunk loaded      |
-+================================================================+
-| FRONTEND (apps/web)                                            |
-| |-- app/page.tsx ...................... OK Home (boilerplate)  |
-| |-- app/upload/ ....................... YOK                    |
-| |-- app/session/ ...................... YOK                    |
-| |-- app/council/ ...................... YOK                    |
-| +-- app/verdict/ ...................... YOK                    |
-+================================================================+
-| PROMPTS (PROMPTS.md -> apps/api/prompts/)                      |
-| |-- Deck Analysis prompt .............. OK Python'a tasindi    |
-| |-- Realtime Notes prompt ............. OK Python'a tasindi    |
-| |-- Council character prompts ......... OK Python'a tasindi    |
-| |-- Q&A mode prompts .................. OK Python'a tasindi (YENi)|
-| +-- Term sheet templates .............. OK Python'a tasindi (YENi)|
-+================================================================+
-| VPS (31.40.198.69)                                             |
-| |-- PostgreSQL 16 + pgvector .......... OK Calisiyor           |
-| |-- Tesseract OCR (:8100) ............. OK Calisiyor           |
-| +-- Caddy ............................. SKIP                   |
-+================================================================+
-| TESTS (pytest)                                                 |
-| |-- test_health.py .................... OK 2 passed            |
-| |-- test_ai_connection.py ............. OK 7 passed            |
-| |-- test_rag_service.py ............... OK RAG works           |
-| |-- test_websocket.py ................. OK 20 passed, 1 skip   |
-| +-- test_council.py ................... OK 25 passed, 2 skip   |
-|                                                                |
-| >>> COUNCIL E2E TESTI YAPILDI - GERCEK API ILE CALISIYOR! <<<  |
-+================================================================+
++====================================================================+
+|                    HAM GERÇEK DURUM (2025-12-23)                   |
++====================================================================+
+| BACKEND (apps/api)                                                 |
+| |-- main.py ............................ ✅ OK Çalışıyor           |
+| |-- services/                                                      |
+| |   |-- database.py ................... ✅ OK PostgreSQL async     |
+| |   |-- gemini_service.py ............. ✅ OK Text + Embed + Pro   |
+| |   |-- deck_analyzer.py .............. ⚠️ Çalışır ama prompt BOŞ  |
+| |   |-- rag_service.py ................ ✅ OK Vector search        |
+| |   |-- live_audio_service.py ......... ⚠️ Setup var, E2E yok     |
+| |   |-- council_service.py ............ ✅ OK 5 VC Panel           |
+| |   |-- qa_service.py ................. ⚠️ Prompt file BOŞ!       |
+| |   +-- term_sheet_service.py ......... 🔴 BOŞ DOSYA (1 satır)    |
+| |-- routers/                                                       |
+| |   |-- session.py .................... ✅ OK CRUD + Upload        |
+| |   +-- websocket.py .................. ✅ OK (merge fix yapıldı)  |
+| |-- prompts/                                                       |
+| |   |-- deck_analysis.py .............. 🔴 BOŞ DOSYA (1 satır)    |
+| |   |-- realtime_notes.py ............. ✅ OK Template             |
+| |   |-- council_characters.py ......... ✅ OK 5 karakter           |
+| |   |-- qa_investor.py ................ 🔴 BOŞ DOSYA (1 satır)    |
+| |   +-- term_sheet.py ................. ✅ OK Template             |
+| |-- models/                                                        |
+| |   |-- session.py .................... ✅ OK + council fields     |
+| |   +-- rag_document.py ............... ✅ OK RAG model            |
+| +-- scripts/seed_rag.py ............... ✅ OK 8 chunk loaded       |
++====================================================================+
+| FRONTEND (apps/web) - %70 HAZIR AMA BACKEND BAĞLI DEĞİL           |
+| |-- app/page.tsx ...................... ✅ OK Home                 |
+| |-- app/upload/page.tsx ............... ✅ 650 satır, ÇALIŞIYOR    |
+| |-- app/session/[id]/page.tsx ......... ✅ 846 satır, WS YOK       |
+| |-- app/council/[id]/page.tsx ......... ✅ 585 satır, MOCK DATA    |
+| |-- app/verdict/[id]/page.tsx ......... ✅ 659 satır, MOCK DATA    |
+| |-- app/history/page.tsx .............. 🔴 BOŞ (1 satır)          |
+| |-- hooks/useWebSocket.ts ............. ⚠️ 275 satır, KULLANILMIYOR|
+| +-- hooks/useAudio.ts ................. ⚠️ 265 satır, KULLANILMIYOR|
++====================================================================+
+| VPS (31.40.198.69)                                                 |
+| |-- PostgreSQL 16 + pgvector .......... ✅ OK Çalışıyor            |
+| |-- Tesseract OCR (:8100) ............. ✅ OK Çalışıyor            |
+| +-- Caddy ............................. ⏭️ SKIP                    |
++====================================================================+
+| TESTS - HAM GERÇEK                                                 |
+| |-- Toplam test sayısı ................ 170 (116 değil!)          |
+| |-- Mock/Logic testler ................ ~74 test                   |
+| |-- Gerçek API testler ................ ~37 test                   |
+| |-- Import/Setup testler .............. ~30 test                   |
+| |-- Skip edilen ....................... ~29 test                   |
+| |-- WebSocket gerçek test ............. ❌ YOK                     |
+| |-- Live Audio E2E test ............... ❌ YOK                     |
+| |-- Full flow E2E test ................ ❌ YOK                     |
+| +-- Test güvenilirlik skoru ........... 5.5/10                     |
++====================================================================+
+```
+
+### 🔴 KRİTİK EKSİKLER (Sistem çalışması için ZORUNLU)
+
+| Dosya | Sorun | Kim Yapacak |
+|-------|-------|-------------|
+| `prompts/deck_analysis.py` | BOŞ - deck analizi ÇALIŞMAZ | Sinem |
+| `prompts/qa_investor.py` | BOŞ - Q&A session ÇALIŞMAZ | Sinem |
+| `services/term_sheet_service.py` | BOŞ - verdict ÇALIŞMAZ | Sinem |
+
+### ⚠️ FRONTEND ENTEGRASYON EKSİKLERİ
+
+| Sayfa | Durum | Sorun |
+|-------|-------|-------|
+| `/session/[id]` | UI var | `useWebSocket` hook KULLANILMIYOR |
+| `/council/[id]` | UI var | Backend'den değil MOCK data gösteriyor |
+| `/verdict/[id]` | UI var | Backend'den değil MOCK data gösteriyor |
+| Tüm sayfalar | UI var | `useAudio` hook KULLANILMIYOR |
+
+---
+
+## Test Durumu - HAM GERÇEK
+
+| Test Dosyası | Test Sayısı | Gerçek Test | Mock | Risk |
+|--------------|-------------|-------------|------|------|
+| test_health.py | 2 | 2 | 0 | Düşük |
+| test_upload.py | 5 | 0 | 5 | Orta |
+| test_ai_connection.py | 7 | 7 | 0 | Düşük |
+| test_ai_generation.py | 4 | 4 | 0 | Düşük |
+| test_ai_embedding.py | 6 | 6 | 0 | Düşük |
+| test_ai_deck_analysis.py | 5 | 5 | 0 | **Yüksek** |
+| test_ai_vision.py | 4 | 4 | 0 | **Yüksek** |
+| test_ai_live_audio.py | 8 | 3 | 5 | **Yüksek** |
+| test_session.py | 6 | 6 | 0 | Düşük |
+| test_rag_service.py | 13 | 7 | 6 | Orta |
+| test_websocket.py | 21 | 6 | 14 | Orta |
+| test_council.py | 27 | 4 | 20 | Orta |
+| test_qa_service.py | 17 | 1 | 13 | **Yüksek** |
+| test_term_sheet_service.py | 31 | 2 | 28 | Düşük |
+| test_merge_fixes.py | 14 | 4 | 10 | Düşük |
+| **TOPLAM** | **170** | **~61** | **~109** | - |
+
+### ❌ TEST EDİLMEMİŞ KRİTİK AKIŞLAR
+
+1. **WebSocket gerçek iletişim** - Hiç test yok
+2. **Live Audio streaming** - Setup var, gerçek audio yok
+3. **Upload → Council → Verdict E2E** - Yok
+4. **Q&A soru-cevap döngüsü** - Assertion yok (sadece print)
+5. **Network hataları / retry** - Yok
+6. **Concurrent session** - Yok
+
+---
+
+## Workload - HAM GERÇEK
+
+| Owner | Toplam | Done | Kod Var | Kalan | Kritik Blocker |
+|-------|--------|------|---------|-------|----------------|
+| Yamaç | 55 | 50 | 0 | 5 | - |
+| Nisa | 22 | 11 | 0 | 11 | - |
+| Bekir | 0 | 0 | 0 | 0 | assign yok |
+| Bartın | 32 | 24 | 0 | 8 | WS/Audio hook entegrasyonu |
+| Sinem | 35 | 12 | 0 | 23 | **3 BOŞ DOSYA!** |
+| Melisa | 14 | 0 | 0 | 14 | Frontend bloke |
+| **TOTAL** | **158** | **97** | **0** | **61** | - |
+
+### ⚠️ WORKLOAD AÇIKLAMASI
+
+- **Bartın**: UI sayfaları VAR ama backend'e bağlı DEĞİL (mock data)
+- **Sinem**: 3 kritik dosya BOŞ bırakılmış - sistem çalışmaz
+- **Melisa**: E2E test yapamaz çünkü frontend mock
+
+---
+
+## Kritik Yol (Minimum MVP) - GÜNCEL
+
+```
+🔴 ÖNCELİK 1: BOŞ DOSYALARI DOLDUR (Sinem)
+   └── prompts/deck_analysis.py      → Deck analizi için ŞART
+   └── prompts/qa_investor.py        → Q&A için ŞART
+   └── services/term_sheet_service.py → Verdict için ŞART
+
+🟡 ÖNCELİK 2: FRONTEND ENTEGRASYONU (Bartın)
+   └── useWebSocket hook'u session page'e bağla
+   └── useAudio hook'u session page'e bağla
+   └── Council/Verdict mock data'yı backend'e bağla
+
+🟢 ÖNCELİK 3: DEPLOYMENT (Yamaç)
+   └── Önce 1 ve 2 tamamlanmalı
 ```
 
 ---
 
-## Test Durumu (Seffaf)
+## 🚨 ACIL GÖREVLER (ÖNCELİK SIRASI)
 
-| Test Dosyasi | Passed | Skipped | Not |
-|--------------|--------|---------|-----|
-| test_health.py | 2 | 0 | DB + API health |
-| test_upload.py | 5 | 0 | File upload tests |
-| test_ai_connection.py | 7 | 0 | Gemini Flash/Embed |
-| test_ai_generation.py | 5 | 0 | Text generation |
-| test_ai_embedding.py | 6 | 0 | Embedding tests |
-| test_ai_deck_analysis.py | 5 | 0 | Deck analysis |
-| test_ai_vision.py | 5 | 0 | Vision tests |
-| test_ai_live_audio.py | 7 | 0 | Live audio setup |
-| test_session.py | 7 | 0 | Session CRUD |
-| test_rag_service.py | 13 | 0 | RAG similarity |
-| test_websocket.py | 20 | 1 | WS + Live Audio + Connection Manager |
-| test_council.py | 27 | 2 | Council chars + service + logic + E2E |
-| **TOPLAM** | **116** | **3** | **E2E YAPILDI!** |
+| # | Görev | Owner | Bloke Eden | Öncelik |
+|---|-------|-------|------------|---------|
+| 1 | `prompts/deck_analysis.py` doldur | Sinem | - | 🔴 **ACİL** |
+| 2 | `prompts/qa_investor.py` doldur | Sinem | - | 🔴 **ACİL** |
+| 3 | `services/term_sheet_service.py` yaz | Sinem | - | 🔴 **ACİL** |
+| 4 | Session page → useWebSocket bağla | Bartın | #1-3 | 🟡 YÜKSEK |
+| 5 | Session page → useAudio bağla | Bartın | #1-3 | 🟡 YÜKSEK |
+| 6 | Council page → backend bağla | Bartın | #1-3 | 🟡 YÜKSEK |
+| 7 | Verdict page → backend bağla | Bartın | #1-3 | 🟡 YÜKSEK |
+| 8 | E2E test yaz (full flow) | Melisa | #4-7 | 🟢 ORTA |
+| 9 | Deployment | Yamaç | #1-7 | 🟢 SON |
 
-> ✅ **Council E2E testi YAPILDI** - Gercek Gemini Pro API ile calisiyor!
-> ✅ Council opening phase test: Orchestrator + Elif Yilmaz konustu
-> ⚠️ Full council flow (8-15 exchange) test edilmedi - cok uzun surer
-> ⚠️ WebSocket E2E test yok - gercek WS baglantisi test edilmedi
-
----
-
-## Workload
-
-| Owner | Toplam | Done | Kod Var | Kalan |
-|-------|--------|------|---------|-------|
-| Yamac | 55 | 50 | 0 | 5 |
-| Nisa | 22 | 11 | 0 | 11 |
-| Bekir | 0 | 0 | 0 | 0 |
-| Bartin | 32 | 0 | 0 | 32 |
-| Sinem | 35 | 17 | 0 | 18 |
-| Melisa | 14 | 0 | 0 | 14 |
-| **TOTAL** | **158** | **78** | **0** | **80** |
-
-> **Degisiklik:** Sinem Q&A ve Term Sheet backend'i tamamladi (+12 done)
-> **Not:** Bekir assign edilmemis - Bartin tum frontend'i ustlendi.
-> **KOD VAR = 0** - Tüm prompt'lar Python'a taşındı ve entegre edildi!
-
----
-
-## Kritik Yol (Minimum MVP)
+### ⚠️ BAĞIMLILIK UYARISI
 
 ```
-EN AZ BUNLAR LAZIM:
-1. /upload sayfasi (Bartin) -> Deck yukleyebilmek icin
-2. /session sayfasi (Bartin) -> Pitch yapabilmek icin
-3. /council sayfasi (Bartin) -> Juri icin (BACKEND HAZIR!)
-4. /verdict sayfasi (Bartin) -> Sonuc icin (BACKEND HAZIR!)
-5. Deployment (Yamac) -> Production'a almak icin
+Sinem'in 3 dosyası DOLDURULMADAN:
+- Bartın backend'e bağlanamaz (import fail)
+- Melisa E2E test yazamaz
+- Yamaç deploy edemez
+
+ÖNCE SİNEM, SONRA DİĞERLERİ!
 ```
 
 ---
 
-## Siradaki Gorevler
+## Bloke Durumu - GÜNCEL
 
-| # | Gorev | Owner | Blocker | Oncelik |
-|---|-------|-------|---------|---------|
-| 1 | `/upload` page + drag-drop | Bartin | - | KRITIK |
-| 2 | `/session/[id]` page + audio | Bartin | #1 | KRITIK |
-| 3 | `/council` page | Bartin | - | YUKSEK |
-| 4 | `/verdict/[id]` page | Bartin | - | YUKSEK |
-| 5 | ~~Q&A prompts -> Python~~ | Sinem | ✅ | TAMAMLANDI |
-| 6 | ~~Term sheet generator~~ | Sinem | ✅ | TAMAMLANDI |
-| 7 | Q&A E2E test | Melisa | - | ORTA |
-| 8 | Deployment | Yamac | #1-4 | SON |
-
----
-
-## Bloke Durumu
-
-| Kisi | Bloklayan | Durum |
+| Kişi | Bloklayan | Durum |
 |------|-----------|-------|
-| Bartin (Council UI) | Yamac | ✅ COZULDU - Backend hazir |
-| Bartin (Verdict UI) | Yamac | ✅ COZULDU - Backend hazir |
-| Sinem (Council chars) | Yamac | ✅ COZULDU - Yamac yapti |
-| Melisa (E2E test) | Bartin | ❌ HALA BLOKE - Frontend yok |
+| Bartın (WS entegrasyon) | Sinem | 🔴 BLOKE - 3 dosya boş |
+| Bartın (Audio entegrasyon) | Sinem | 🔴 BLOKE - qa_investor.py boş |
+| Melisa (E2E test) | Bartın + Sinem | 🔴 BLOKE - Mock data var |
+| Yamaç (Deploy) | Herkes | 🟡 BEKLİYOR |
+| Sinem | - | ⚡ ÇALIŞMALI - Kritik dosyalar |
 
 ---
 
@@ -673,23 +736,59 @@ SINEM TAMAMLADI:
 
 ---
 
-*Son guncelleme: 2025-12-22 20.30 (güncel)*
-*Gercek ilerleme: ~49% (78/158 done, 0 kod var - hepsi entegre!)*
-*Backend: ~70% | Frontend: ~5% (0% functional) | Prompts: ~100% | Tests: 116 passed, 3 skipped*
+*Son güncelleme: 2025-12-23 (HAM GERÇEK DENETİMİ)*
+*Gerçek ilerleme: ~35% (fonksiyonel)*
+*Backend: ~35% (3 dosya BOŞ) | Frontend: ~50% (mock) | Tests: 170 var, 61 gerçek*
 
 ---
 
-## Denetim Sonucu (3 Agent Audit - 2025-12-22)
+## ⚡ HEMEN YAPILMASI GEREKENLER
 
-| Onceki Iddia | Gercek Durum | Fark |
-|--------------|--------------|------|
-| Backend: ~85% | ~59% | -26% |
-| Tests: 60 passed | 116 passed | +56 |
-| Frontend: ~5% | ~5% (0% functional) | Dogru ama yaniltici |
+```
+1. SİNEM → 3 boş dosyayı doldur (deck_analysis, qa_investor, term_sheet_service)
+2. BARTIN → useWebSocket ve useAudio hook'larını sayfalara bağla
+3. BARTIN → Council/Verdict sayfalarını backend'e bağla
+4. MELİSA → E2E test yaz (full flow)
+5. YAMAÇ → Deploy
 
-**Eksik Backend Parcalari:**
-- ~~Q&A Mode: Prompt var, Python kodu YOK~~ ✅ TAMAMLANDI
-- ~~Term Sheet Generator: Template var, service YOK~~ ✅ TAMAMLANDI
-- ~~Verdict Generation: Endpoint var, generator YOK~~ ✅ TAMAMLANDI (otomatik üretim)
-- Deployment: %0
-- Frontend: %5 (sadece boilerplate)
+SIRALAMA ÖNEMLİ! Her adım bir sonrakini bloke ediyor.
+```
+
+---
+
+## Denetim Sonucu (3 Agent Audit - 2025-12-23)
+
+| Önceki İddia | HAM GERÇEK | Fark |
+|--------------|------------|------|
+| Backend: ~70% | **~35%** | -35% |
+| Frontend: ~70% | **~50%** (mock) | -20% |
+| Tests: 116 passed | **170 var, 61 gerçek** | Şişirilmiş |
+| Prompts: ~100% | **~40%** (3 dosya boş) | -60% |
+
+### 🔴 3 BOŞ DOSYA (KRİTİK)
+
+| Dosya | Satır | Etki |
+|-------|-------|------|
+| `prompts/deck_analysis.py` | 1 | Deck analizi ÇALIŞMAZ |
+| `prompts/qa_investor.py` | 1 | Q&A session ÇALIŞMAZ |
+| `services/term_sheet_service.py` | 1 | Verdict ÇALIŞMAZ |
+
+### ⚠️ FRONTEND MOCK SORUNU
+
+| Sayfa | UI Durumu | Backend Bağlı mı? |
+|-------|-----------|-------------------|
+| `/upload` | ✅ 650 satır | ✅ GERÇEK API |
+| `/session/[id]` | ✅ 846 satır | ❌ WS YOK |
+| `/council/[id]` | ✅ 585 satır | ❌ MOCK DATA |
+| `/verdict/[id]` | ✅ 659 satır | ❌ MOCK DATA |
+
+### 📊 GERÇEK İLERLEME
+
+```
+Önceki iddia: ~49% (78/158)
+HAM GERÇEK:   ~35% (fonksiyonel)
+
+Backend servisleri: Çoğu OK ama 3 dosya BOŞ
+Frontend sayfaları: UI var ama backend'e bağlı DEĞİL
+Testler: Çoğu mock, gerçek coverage düşük
+```
