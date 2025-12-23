@@ -1,584 +1,784 @@
 'use client'
 
-import { useEffect, useState, useRef } from 'react'
-import { useParams, useRouter } from 'next/navigation'
+import { useState, useEffect, useRef } from 'react'
+import { useParams } from 'next/navigation'
 import Link from 'next/link'
+import {
+  ChevronLeft,
+  ThumbsUp,
+  ThumbsDown,
+  MessageCircle,
+  Loader2,
+  Zap,
+  TrendingUp,
+  DollarSign,
+  Award,
+  Clock,
+  Users,
+  Briefcase,
+  Target,
+  Lightbulb,
+  Heart,
+} from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { apiCall } from '@/lib/api'
+import { Card, CardContent } from '@/components/ui/card'
 
-// Types
-interface VCCharacter {
-  id: string
-  name: string
-  title: string
-  avatar: string
-  personality: string
-  color: string
-}
+// API_URL will be used when integrating with backend
+// const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
 
-interface DialogMessage {
-  id: string
-  speaker_id: string
-  speaker_name: string
-  content: string
-  timestamp: Date
-  type: 'discussion' | 'question' | 'vote'
-}
-
-interface VoteData {
-  investor_id: string
-  decision: 'invest' | 'pass' | 'undecided'
-  confidence: number
-  reasoning?: string
-}
-
-interface SessionData {
-  session_id: string
-  status: string
-  investor_mode: string
-  deck_analysis?: {
-    scores?: {
-      overall_score?: number
-    }
-  }
-}
-
-// VC Characters
-const VC_CHARACTERS: VCCharacter[] = [
-  {
-    id: 'alex',
-    name: 'Alex Chen',
-    title: 'Growth Partner',
-    avatar: 'AC',
-    personality: 'Data-driven, asks about metrics',
-    color: 'bg-blue-500',
-  },
+// VC Council Members with enhanced data
+const vcMembers = [
   {
     id: 'sarah',
-    name: 'Sarah Williams',
-    title: 'Managing Partner',
-    avatar: 'SW',
-    personality: 'Strategic thinker, market focus',
-    color: 'bg-purple-500',
+    name: 'Sarah Chen',
+    role: 'Growth Specialist',
+    firm: 'Velocity Ventures',
+    style: 'Metrics-focused',
+    avatar: '👩‍💼',
+    color: '#8B5CF6',
+    bgGradient: 'from-purple-500 to-indigo-600',
+    icon: TrendingUp,
+    expertise: ['SaaS Metrics', 'Growth Strategy', 'Unit Economics'],
+    portfolio: '42 Companies',
+    avgCheck: '$500K',
   },
   {
-    id: 'michael',
-    name: 'Michael Park',
-    title: 'Tech Partner',
-    avatar: 'MP',
-    personality: 'Technical depth, scalability',
-    color: 'bg-green-500',
+    id: 'marcus',
+    name: 'Marcus Johnson',
+    role: 'Tech Investor',
+    firm: 'Binary Capital',
+    style: 'Technical deep-diver',
+    avatar: '👨‍💻',
+    color: '#3B82F6',
+    bgGradient: 'from-blue-500 to-cyan-600',
+    icon: Lightbulb,
+    expertise: ['AI/ML', 'Infrastructure', 'Developer Tools'],
+    portfolio: '38 Companies',
+    avgCheck: '$750K',
   },
   {
     id: 'elena',
     name: 'Elena Rodriguez',
-    title: 'Operating Partner',
-    avatar: 'ER',
-    personality: 'Operations, team dynamics',
-    color: 'bg-amber-500',
+    role: 'Market Expert',
+    firm: 'Global Seed Fund',
+    style: 'Market-size focused',
+    avatar: '👩‍🔬',
+    color: '#10B981',
+    bgGradient: 'from-emerald-500 to-teal-600',
+    icon: Target,
+    expertise: ['Market Analysis', 'Go-to-Market', 'B2B Sales'],
+    portfolio: '55 Companies',
+    avgCheck: '$400K',
   },
   {
     id: 'david',
-    name: 'David Kim',
-    title: 'Seed Partner',
-    avatar: 'DK',
-    personality: 'Vision, founder-market fit',
-    color: 'bg-red-500',
+    name: 'David Park',
+    role: 'Serial Entrepreneur',
+    firm: 'Founder Fund',
+    style: 'Execution-focused',
+    avatar: '👨‍🚀',
+    color: '#F59E0B',
+    bgGradient: 'from-amber-500 to-orange-600',
+    icon: Briefcase,
+    expertise: ['Operations', 'Scaling', 'Exit Strategy'],
+    portfolio: '28 Companies',
+    avgCheck: '$1M',
+  },
+  {
+    id: 'amanda',
+    name: 'Amanda Foster',
+    role: 'Impact Investor',
+    firm: 'Purpose Capital',
+    style: 'Mission-driven',
+    avatar: '👩‍🌾',
+    color: '#EC4899',
+    bgGradient: 'from-pink-500 to-rose-600',
+    icon: Heart,
+    expertise: ['ESG', 'Social Impact', 'Sustainability'],
+    portfolio: '35 Companies',
+    avgCheck: '$600K',
   },
 ]
 
-// SVG Icons
-function Spinner({ className }: { className?: string }) {
-  return (
-    <svg className={`animate-spin ${className}`} viewBox="0 0 24 24" fill="none">
-      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-      <path
-        className="opacity-75"
-        fill="currentColor"
-        d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-      />
-    </svg>
-  )
+interface DialogMessage {
+  memberId: string
+  message: string
+  timestamp: Date
 }
 
-function CheckIcon({ className }: { className?: string }) {
-  return (
-    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-      <polyline points="20 6 9 17 4 12" />
-    </svg>
-  )
+interface Vote {
+  memberId: string
+  decision: 'invest' | 'pass'
+  amount?: string
+  reason: string
 }
 
-function XIcon({ className }: { className?: string }) {
-  return (
-    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-      <line x1="18" y1="6" x2="6" y2="18" />
-      <line x1="6" y1="6" x2="18" y2="18" />
-    </svg>
-  )
-}
-
-function MinusIcon({ className }: { className?: string }) {
-  return (
-    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-      <line x1="5" y1="12" x2="19" y2="12" />
-    </svg>
-  )
-}
-
-// VC Avatar Component with Speaking Animation
-function VCAvatar({
-  character,
-  isSpeaking,
-  vote,
-  size = 'medium',
-}: {
-  character: VCCharacter
-  isSpeaking: boolean
-  vote?: VoteData
-  size?: 'small' | 'medium' | 'large'
-}) {
-  const sizeClasses = {
-    small: 'w-10 h-10 text-sm',
-    medium: 'w-16 h-16 text-xl',
-    large: 'w-24 h-24 text-3xl',
-  }
-
-  const ringSize = {
-    small: 'ring-2',
-    medium: 'ring-4',
-    large: 'ring-4',
-  }
+// Council state progress indicator
+function CouncilProgress({ state }: { state: 'intro' | 'discussion' | 'voting' | 'complete' }) {
+  const steps = [
+    { id: 'intro', label: 'Introduction' },
+    { id: 'discussion', label: 'Discussion' },
+    { id: 'voting', label: 'Voting' },
+    { id: 'complete', label: 'Complete' },
+  ]
+  const currentIndex = steps.findIndex((s) => s.id === state)
 
   return (
-    <div className="flex flex-col items-center gap-2">
-      <div className="relative">
-        <div
-          className={`${sizeClasses[size]} ${character.color} rounded-full flex items-center justify-center text-white font-bold transition-all ${
-            isSpeaking ? `${ringSize[size]} ring-accent-custom animate-pulse` : ''
-          }`}
-        >
-          {character.avatar}
-        </div>
-        {/* Speaking indicator */}
-        {isSpeaking && (
-          <div className="absolute -bottom-1 left-1/2 -translate-x-1/2 flex gap-0.5">
-            <div className="w-1.5 h-1.5 bg-accent-custom rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
-            <div className="w-1.5 h-1.5 bg-accent-custom rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
-            <div className="w-1.5 h-1.5 bg-accent-custom rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
-          </div>
-        )}
-        {/* Vote indicator */}
-        {vote && (
+    <div className="flex items-center justify-center gap-2 mb-6">
+      {steps.map((step, index) => (
+        <div key={step.id} className="flex items-center">
           <div
-            className={`absolute -top-1 -right-1 w-6 h-6 rounded-full flex items-center justify-center ${
-              vote.decision === 'invest'
-                ? 'bg-green-500'
-                : vote.decision === 'pass'
-                ? 'bg-red-500'
-                : 'bg-neutral-400'
+            className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-medium transition-all ${
+              index <= currentIndex
+                ? 'bg-accent-custom text-white'
+                : 'bg-neutral-custom/10 text-neutral-custom-subdued'
             }`}
           >
-            {vote.decision === 'invest' && <CheckIcon className="w-4 h-4 text-white" />}
-            {vote.decision === 'pass' && <XIcon className="w-4 h-4 text-white" />}
-            {vote.decision === 'undecided' && <MinusIcon className="w-4 h-4 text-white" />}
+            <span
+              className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] ${
+                index <= currentIndex ? 'bg-white/20' : 'bg-neutral-custom/10'
+              }`}
+            >
+              {index + 1}
+            </span>
+            <span className="hidden sm:inline">{step.label}</span>
           </div>
-        )}
-      </div>
-      <div className="text-center">
-        <div className="text-sm font-medium text-neutral-custom">{character.name}</div>
-        <div className="text-xs text-neutral-custom-subdued">{character.title}</div>
-      </div>
+          {index < steps.length - 1 && (
+            <div
+              className={`w-8 h-0.5 mx-1 ${
+                index < currentIndex ? 'bg-accent-custom' : 'bg-neutral-custom/10'
+              }`}
+            />
+          )}
+        </div>
+      ))}
     </div>
   )
 }
 
-// Speech Bubble Component
-function SpeechBubble({
-  message,
-  character,
-  isLatest,
+// Enhanced Avatar component with card style
+function VCAvatar({
+  member,
+  isSpeaking,
+  vote,
+  isSelected,
+  onClick,
 }: {
-  message: DialogMessage
-  character?: VCCharacter
+  member: typeof vcMembers[0]
+  isSpeaking: boolean
+  vote?: Vote
+  isSelected: boolean
+  onClick: () => void
+}) {
+  return (
+    <button
+      onClick={onClick}
+      className={`relative group transition-all duration-300 ${
+        isSpeaking ? 'scale-110 z-10' : 'hover:scale-105'
+      }`}
+    >
+      {/* Card container */}
+      <div
+        className={`bg-white rounded-2xl p-3 shadow-sm transition-all duration-300 ${
+          isSpeaking
+            ? 'shadow-xl'
+            : isSelected
+            ? 'shadow-lg'
+            : 'hover:shadow-md'
+        }`}
+        style={{
+          boxShadow: isSpeaking
+            ? `0 0 0 2px ${member.color}, 0 20px 25px -5px rgba(0, 0, 0, 0.1)`
+            : isSelected
+            ? `0 0 0 1px ${member.color}, 0 10px 15px -3px rgba(0, 0, 0, 0.1)`
+            : undefined,
+        }}
+      >
+        {/* Speaking indicator */}
+        {isSpeaking && (
+          <div className="absolute -top-2 left-1/2 -translate-x-1/2">
+            <div className="flex items-center gap-1 bg-accent-custom text-white text-[10px] px-2 py-0.5 rounded-full">
+              <div className="w-1.5 h-1.5 bg-white rounded-full animate-pulse" />
+              Speaking
+            </div>
+          </div>
+        )}
+
+        {/* Avatar with gradient background */}
+        <div className="relative mb-2">
+          {/* Animated rings for speaking */}
+          {isSpeaking && (
+            <>
+              <div
+                className="absolute inset-0 rounded-xl animate-ping opacity-20"
+                style={{ backgroundColor: member.color }}
+              />
+              <div
+                className="absolute -inset-1 rounded-xl animate-pulse opacity-30"
+                style={{ backgroundColor: member.color }}
+              />
+            </>
+          )}
+
+          <div
+            className={`w-14 h-14 md:w-16 md:h-16 rounded-xl bg-gradient-to-br ${member.bgGradient} flex items-center justify-center text-2xl md:text-3xl relative overflow-hidden`}
+          >
+            {/* Shimmer effect */}
+            <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-1000" />
+            {member.avatar}
+          </div>
+
+          {/* Vote badge */}
+          {vote && (
+            <div
+              className={`absolute -bottom-1 -right-1 w-6 h-6 rounded-lg flex items-center justify-center shadow-lg animate-in zoom-in duration-300 ${
+                vote.decision === 'invest'
+                  ? 'bg-gradient-to-br from-green-400 to-green-600'
+                  : 'bg-gradient-to-br from-red-400 to-red-600'
+              }`}
+            >
+              {vote.decision === 'invest' ? (
+                <ThumbsUp className="w-3 h-3 text-white" />
+              ) : (
+                <ThumbsDown className="w-3 h-3 text-white" />
+              )}
+            </div>
+          )}
+        </div>
+
+        {/* Info */}
+        <div className="text-center">
+          <p className="text-xs font-semibold text-neutral-custom truncate max-w-[80px]">
+            {member.name.split(' ')[0]}
+          </p>
+          <p className="text-[10px] text-neutral-custom-subdued truncate max-w-[80px]">
+            {member.firm}
+          </p>
+        </div>
+      </div>
+
+      {/* Expertise tooltip on hover */}
+      <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none z-20">
+        <div className="bg-neutral-custom text-white text-[10px] px-3 py-2 rounded-lg shadow-xl whitespace-nowrap">
+          <p className="font-semibold mb-1">{member.name}</p>
+          <p className="text-white/70">{member.style}</p>
+          <div className="flex items-center gap-2 mt-1 text-white/60">
+            <span>{member.portfolio}</span>
+            <span>•</span>
+            <span>{member.avgCheck}</span>
+          </div>
+        </div>
+      </div>
+    </button>
+  )
+}
+
+// Enhanced Speech Bubble component
+function SpeechBubble({
+  member,
+  message,
+  isLatest,
+  timestamp,
+}: {
+  member: typeof vcMembers[0]
+  message: string
   isLatest: boolean
+  timestamp?: Date
 }) {
   return (
     <div
-      className={`flex gap-3 ${isLatest ? 'animate-fadeIn' : ''}`}
-      style={{ animationDuration: '0.3s' }}
+      className={`flex gap-3 p-4 rounded-2xl transition-all duration-300 animate-in slide-in-from-bottom-2 ${
+        isLatest
+          ? 'bg-white shadow-lg border-l-4'
+          : 'bg-neutral-custom/5 hover:bg-neutral-custom/10'
+      }`}
+      style={{ borderLeftColor: isLatest ? member.color : 'transparent' }}
     >
       {/* Avatar */}
-      {character && (
+      <div className="relative flex-shrink-0">
         <div
-          className={`w-10 h-10 ${character.color} rounded-full flex items-center justify-center text-white font-bold text-sm flex-shrink-0`}
+          className={`w-10 h-10 rounded-xl bg-gradient-to-br ${member.bgGradient} flex items-center justify-center text-lg`}
         >
-          {character.avatar}
+          {member.avatar}
         </div>
-      )}
+        {isLatest && (
+          <div
+            className="absolute -bottom-1 -right-1 w-3 h-3 rounded-full border-2 border-white"
+            style={{ backgroundColor: member.color }}
+          />
+        )}
+      </div>
 
-      {/* Bubble */}
-      <div className="flex-1">
-        <div className="flex items-center gap-2 mb-1">
-          <span className="text-sm font-medium text-neutral-custom">
-            {message.speaker_name}
-          </span>
-          <span className="text-xs text-neutral-custom-subdued">
-            {message.timestamp.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}
-          </span>
-          {message.type === 'vote' && (
-            <span className="text-xs bg-purple-100 text-purple-700 px-2 py-0.5 rounded-full">
-              Vote
+      {/* Content */}
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center justify-between gap-2 mb-1">
+          <div className="flex items-center gap-2">
+            <span className="font-semibold text-neutral-custom text-sm">{member.name}</span>
+            <span
+              className="text-[10px] px-2 py-0.5 rounded-full"
+              style={{ backgroundColor: `${member.color}15`, color: member.color }}
+            >
+              {member.style}
+            </span>
+          </div>
+          {timestamp && (
+            <span className="text-[10px] text-neutral-custom-subdued">
+              {timestamp.toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' })}
             </span>
           )}
         </div>
-        <div className="bg-white border border-neutral-200 rounded-lg rounded-tl-none px-4 py-3 shadow-sm">
-          <p className="text-sm text-neutral-custom">{message.content}</p>
-        </div>
+        <p className="text-neutral-custom-subdued text-sm leading-relaxed">{message}</p>
       </div>
     </div>
   )
 }
 
-// Vote Display Component
-function VoteDisplay({ votes }: { votes: VoteData[] }) {
+// Enhanced Vote Summary component
+function VoteSummary({ votes }: { votes: Vote[] }) {
   const investCount = votes.filter((v) => v.decision === 'invest').length
   const passCount = votes.filter((v) => v.decision === 'pass').length
-  const undecidedCount = votes.filter((v) => v.decision === 'undecided').length
+  const totalAmount = votes
+    .filter((v) => v.amount)
+    .reduce((sum, v) => sum + parseFloat(v.amount!.replace(/[^0-9.]/g, '')) * 1000, 0)
 
   return (
-    <Card className="bg-white">
-      <CardHeader className="pb-2">
-        <CardTitle className="text-lg">Voting Status</CardTitle>
-      </CardHeader>
-      <CardContent>
-        <div className="grid grid-cols-3 gap-4 text-center">
-          <div className="p-4 bg-green-50 rounded-lg">
-            <div className="text-3xl font-bold text-green-600">{investCount}</div>
-            <div className="text-sm text-green-700">Invest</div>
-          </div>
-          <div className="p-4 bg-red-50 rounded-lg">
-            <div className="text-3xl font-bold text-red-600">{passCount}</div>
-            <div className="text-sm text-red-700">Pass</div>
-          </div>
-          <div className="p-4 bg-neutral-50 rounded-lg">
-            <div className="text-3xl font-bold text-neutral-600">{undecidedCount}</div>
-            <div className="text-sm text-neutral-700">Pending</div>
-          </div>
+    <Card className="bg-white overflow-hidden">
+      {/* Header with gradient */}
+      <div className="bg-gradient-to-r from-accent-custom to-accent-custom-baseline p-4 text-white">
+        <div className="flex items-center gap-2 mb-2">
+          <Users className="w-5 h-5" />
+          <h3 className="font-semibold">Council Decision</h3>
         </div>
-
-        {/* Progress bar */}
-        <div className="mt-4 h-3 bg-neutral-200 rounded-full overflow-hidden flex">
-          {investCount > 0 && (
-            <div
-              className="h-full bg-green-500 transition-all"
-              style={{ width: `${(investCount / 5) * 100}%` }}
-            />
-          )}
-          {passCount > 0 && (
-            <div
-              className="h-full bg-red-500 transition-all"
-              style={{ width: `${(passCount / 5) * 100}%` }}
-            />
-          )}
-        </div>
-
-        <p className="text-center text-sm text-neutral-custom-subdued mt-3">
-          {votes.length < 5
-            ? `${5 - votes.length} investor${5 - votes.length > 1 ? 's' : ''} still voting`
-            : 'All votes cast'}
+        <p className="text-sm text-white/80">
+          {votes.length} of 5 votes received
         </p>
+      </div>
+
+      <CardContent className="p-4">
+        {/* Vote counts */}
+        <div className="grid grid-cols-2 gap-3 mb-4">
+          <div className="bg-gradient-to-br from-green-50 to-green-100 rounded-xl p-3 text-center">
+            <div className="w-10 h-10 rounded-full bg-green-500 flex items-center justify-center mx-auto mb-2">
+              <ThumbsUp className="w-5 h-5 text-white" />
+            </div>
+            <p className="text-2xl font-bold text-green-600">{investCount}</p>
+            <p className="text-xs text-green-700">Invest</p>
+          </div>
+
+          <div className="bg-gradient-to-br from-red-50 to-red-100 rounded-xl p-3 text-center">
+            <div className="w-10 h-10 rounded-full bg-red-500 flex items-center justify-center mx-auto mb-2">
+              <ThumbsDown className="w-5 h-5 text-white" />
+            </div>
+            <p className="text-2xl font-bold text-red-600">{passCount}</p>
+            <p className="text-xs text-red-700">Pass</p>
+          </div>
+        </div>
+
+        {/* Total investment */}
+        {totalAmount > 0 && (
+          <div className="bg-accent-custom/5 rounded-xl p-3 mb-4 flex items-center gap-3">
+            <div className="w-10 h-10 rounded-full bg-accent-custom/10 flex items-center justify-center">
+              <DollarSign className="w-5 h-5 text-accent-custom" />
+            </div>
+            <div>
+              <p className="text-xs text-neutral-custom-subdued">Total Committed</p>
+              <p className="text-lg font-bold text-accent-custom">
+                ${(totalAmount / 1000000).toFixed(2)}M
+              </p>
+            </div>
+          </div>
+        )}
+
+        {/* Individual votes */}
+        <div className="space-y-2 max-h-[250px] overflow-y-auto">
+          {votes.map((vote) => {
+            const member = vcMembers.find((m) => m.id === vote.memberId)
+            if (!member) return null
+
+            return (
+              <div
+                key={vote.memberId}
+                className={`p-3 rounded-xl transition-all animate-in slide-in-from-right-2 ${
+                  vote.decision === 'invest'
+                    ? 'bg-green-50 border border-green-200'
+                    : 'bg-red-50 border border-red-200'
+                }`}
+              >
+                <div className="flex items-center justify-between mb-1">
+                  <div className="flex items-center gap-2">
+                    <div
+                      className={`w-7 h-7 rounded-lg bg-gradient-to-br ${member.bgGradient} flex items-center justify-center text-sm`}
+                    >
+                      {member.avatar}
+                    </div>
+                    <span className="font-medium text-sm text-neutral-custom">
+                      {member.name.split(' ')[0]}
+                    </span>
+                  </div>
+                  {vote.amount && (
+                    <span className="text-xs font-semibold bg-green-200 text-green-800 px-2 py-0.5 rounded-full">
+                      {vote.amount}
+                    </span>
+                  )}
+                </div>
+                <p className="text-xs text-neutral-custom-subdued line-clamp-2">
+                  {vote.reason}
+                </p>
+              </div>
+            )
+          })}
+        </div>
       </CardContent>
     </Card>
   )
 }
 
-// Main Component
+// Navbar component
+function CouncilNav({ sessionId }: { sessionId: string }) {
+  return (
+    <nav className="bg-white border-b px-6 py-4">
+      <div className="max-w-6xl mx-auto flex items-center justify-between">
+        <div className="flex items-center gap-4">
+          <Link href={`/session/${sessionId}?mode=council`} className="text-neutral-custom-subdued hover:text-neutral-custom transition-colors">
+            <ChevronLeft className="w-5 h-5" />
+          </Link>
+          <div className="flex items-center gap-2">
+            <div className="w-8 h-8 rounded-lg bg-accent-custom flex items-center justify-center">
+              <Zap className="w-5 h-5 text-white" />
+            </div>
+            <span className="font-bold text-xl text-neutral-custom">PitchDrill</span>
+          </div>
+        </div>
+        <div className="flex items-center gap-4">
+          <Link href="/help" className="hidden sm:block text-sm text-neutral-custom-subdued hover:text-neutral-custom transition-colors">
+            Help
+          </Link>
+          <div className="flex items-center gap-1 text-xs text-neutral-custom-subdued bg-neutral-custom/5 px-3 py-1.5 rounded-full">
+            <Users className="w-3 h-3" />
+            VC Council Mode
+          </div>
+        </div>
+      </div>
+    </nav>
+  )
+}
+
+// Member detail panel
+function MemberDetailPanel({ member, onClose }: { member: typeof vcMembers[0]; onClose: () => void }) {
+  const IconComponent = member.icon
+
+  return (
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={onClose}>
+      <Card className="bg-white max-w-md w-full animate-in zoom-in-95 duration-200" onClick={(e) => e.stopPropagation()}>
+        <CardContent className="p-6">
+          {/* Header */}
+          <div className="flex items-start gap-4 mb-4">
+            <div
+              className={`w-16 h-16 rounded-2xl bg-gradient-to-br ${member.bgGradient} flex items-center justify-center text-3xl`}
+            >
+              {member.avatar}
+            </div>
+            <div className="flex-1">
+              <h3 className="text-xl font-bold text-neutral-custom">{member.name}</h3>
+              <p className="text-sm text-neutral-custom-subdued">{member.role}</p>
+              <p className="text-xs" style={{ color: member.color }}>{member.firm}</p>
+            </div>
+          </div>
+
+          {/* Style badge */}
+          <div
+            className="inline-flex items-center gap-1 text-xs px-3 py-1.5 rounded-full mb-4"
+            style={{ backgroundColor: `${member.color}15`, color: member.color }}
+          >
+            <IconComponent className="w-3 h-3" />
+            {member.style}
+          </div>
+
+          {/* Stats */}
+          <div className="grid grid-cols-2 gap-3 mb-4">
+            <div className="bg-neutral-custom/5 rounded-xl p-3 text-center">
+              <p className="text-lg font-bold text-neutral-custom">{member.portfolio}</p>
+              <p className="text-xs text-neutral-custom-subdued">Portfolio</p>
+            </div>
+            <div className="bg-neutral-custom/5 rounded-xl p-3 text-center">
+              <p className="text-lg font-bold text-neutral-custom">{member.avgCheck}</p>
+              <p className="text-xs text-neutral-custom-subdued">Avg. Check</p>
+            </div>
+          </div>
+
+          {/* Expertise */}
+          <div>
+            <p className="text-xs text-neutral-custom-subdued mb-2">Expertise</p>
+            <div className="flex flex-wrap gap-2">
+              {member.expertise.map((exp, i) => (
+                <span
+                  key={i}
+                  className="text-xs px-2 py-1 rounded-full bg-neutral-custom/5 text-neutral-custom"
+                >
+                  {exp}
+                </span>
+              ))}
+            </div>
+          </div>
+
+          {/* Close button */}
+          <Button
+            onClick={onClose}
+            variant="outline"
+            className="w-full mt-4"
+          >
+            Close
+          </Button>
+        </CardContent>
+      </Card>
+    </div>
+  )
+}
+
 export default function CouncilPage() {
   const params = useParams()
-  const router = useRouter()
   const sessionId = params.id as string
+  const dialogRef = useRef<HTMLDivElement>(null)
 
-  const [sessionData, setSessionData] = useState<SessionData | null>(null)
   const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
-
-  // Council state
+  const [councilState, setCouncilState] = useState<'intro' | 'discussion' | 'voting' | 'complete'>('intro')
+  const [speakingMember, setSpeakingMember] = useState<string | null>(null)
   const [dialog, setDialog] = useState<DialogMessage[]>([])
-  const [votes, setVotes] = useState<VoteData[]>([])
-  const [currentSpeaker, setCurrentSpeaker] = useState<string | null>(null)
-  const [isDiscussionComplete, setIsDiscussionComplete] = useState(false)
-
-  const dialogEndRef = useRef<HTMLDivElement>(null)
-
-  // Fetch session data
-  useEffect(() => {
-    async function fetchSession() {
-      try {
-        const response = await apiCall<SessionData>(`/api/session/${sessionId}`)
-        if (response.success && response.data) {
-          setSessionData(response.data)
-        } else {
-          setError(response.error?.message || 'Session not found')
-        }
-      } catch (err) {
-        setError('Connection error')
-      } finally {
-        setLoading(false)
-      }
-    }
-
-    if (sessionId) {
-      fetchSession()
-    }
-  }, [sessionId])
+  const [votes, setVotes] = useState<Vote[]>([])
+  const [selectedMember, setSelectedMember] = useState<string | null>(null)
 
   // Simulate council discussion
   useEffect(() => {
-    if (loading || error) return
-
-    const discussionScript: { speakerId: string; content: string; delay: number; type: 'discussion' | 'question' | 'vote' }[] = [
-      { speakerId: 'sarah', content: 'This pitch looks interesting. What do you think about the market size?', delay: 1000, type: 'discussion' },
-      { speakerId: 'alex', content: 'Looking at TAM, we see a $2.5B market. However, the SAM calculation seems a bit aggressive.', delay: 3000, type: 'discussion' },
-      { speakerId: 'michael', content: 'Technically there\'s scalability potential. Their choice of microservices architecture is a good sign.', delay: 5000, type: 'discussion' },
-      { speakerId: 'elena', content: 'The team is experienced but I\'d like more detail on the operational side.', delay: 7000, type: 'discussion' },
-      { speakerId: 'david', content: 'Strong founder-market fit. The founders\' industry background is reassuring.', delay: 9000, type: 'discussion' },
-      { speakerId: 'sarah', content: 'I\'m voting INVEST. Solid thesis for early stage.', delay: 12000, type: 'vote' },
-      { speakerId: 'alex', content: 'Seeing the metrics, I say INVEST but we should be careful.', delay: 14000, type: 'vote' },
-      { speakerId: 'michael', content: 'INVEST for the technical vision.', delay: 16000, type: 'vote' },
-      { speakerId: 'elena', content: 'Considering operational risks, I\'m saying PASS this round.', delay: 18000, type: 'vote' },
-      { speakerId: 'david', content: 'I trust the founder. INVEST.', delay: 20000, type: 'vote' },
-    ]
-
-    let messageIndex = 0
-    const interval = setInterval(() => {
-      if (messageIndex >= discussionScript.length) {
-        setIsDiscussionComplete(true)
-        clearInterval(interval)
-        return
-      }
-
-      const script = discussionScript[messageIndex]
-      const character = VC_CHARACTERS.find((c) => c.id === script.speakerId)
-
-      // Set current speaker
-      setCurrentSpeaker(script.speakerId)
-
-      // Add message
-      const newMessage: DialogMessage = {
-        id: Date.now().toString(),
-        speaker_id: script.speakerId,
-        speaker_name: character?.name || 'Unknown',
-        content: script.content,
-        timestamp: new Date(),
-        type: script.type,
-      }
-      setDialog((prev) => [...prev, newMessage])
-
-      // Add vote if it's a vote message
-      if (script.type === 'vote') {
-        const isInvest = script.content.includes('INVEST')
-        setVotes((prev) => [
-          ...prev,
-          {
-            investor_id: script.speakerId,
-            decision: isInvest ? 'invest' : 'pass',
-            confidence: isInvest ? 75 : 60,
-          },
-        ])
-      }
-
-      // Clear speaker after a moment
-      setTimeout(() => setCurrentSpeaker(null), 1500)
-
-      messageIndex++
-    }, 2500)
-
-    return () => clearInterval(interval)
-  }, [loading, error])
+    const timer = setTimeout(() => setLoading(false), 1500)
+    return () => clearTimeout(timer)
+  }, [])
 
   // Auto-scroll dialog
   useEffect(() => {
-    dialogEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+    if (dialogRef.current) {
+      dialogRef.current.scrollTop = dialogRef.current.scrollHeight
+    }
   }, [dialog])
 
-  const handleGoToVerdict = () => {
-    router.push(`/verdict/${sessionId}`)
+  const startDiscussion = () => {
+    setCouncilState('discussion')
+
+    // Simulate council members speaking
+    const messages = [
+      { memberId: 'sarah', message: "Looking at the metrics presented, I see strong month-over-month growth. However, I'd like to understand your customer acquisition cost better." },
+      { memberId: 'marcus', message: "The technical architecture seems solid, but I have concerns about scalability. How do you plan to handle 10x the current load?" },
+      { memberId: 'elena', message: "The TAM calculation is interesting, but I think there's a larger opportunity in adjacent markets you haven't explored." },
+      { memberId: 'david', message: "I've seen similar execution before. The key will be your go-to-market strategy in the first 18 months." },
+      { memberId: 'amanda', message: "I appreciate the mission-driven approach. Let's discuss how you measure social impact alongside financial returns." },
+    ]
+
+    messages.forEach((msg, index) => {
+      setTimeout(() => {
+        setSpeakingMember(msg.memberId)
+        setDialog((prev) => [...prev, { ...msg, timestamp: new Date() }])
+
+        setTimeout(() => {
+          setSpeakingMember(null)
+          if (index === messages.length - 1) {
+            setCouncilState('voting')
+            simulateVoting()
+          }
+        }, 3000)
+      }, index * 5000)
+    })
   }
+
+  const simulateVoting = () => {
+    const mockVotes: Vote[] = [
+      { memberId: 'sarah', decision: 'invest', amount: '$500K', reason: 'Strong unit economics and clear path to profitability.' },
+      { memberId: 'marcus', decision: 'invest', amount: '$300K', reason: 'Solid technical foundation with room for innovation.' },
+      { memberId: 'elena', decision: 'pass', reason: 'Market timing concerns. Would reconsider in 6 months.' },
+      { memberId: 'david', decision: 'invest', amount: '$750K', reason: 'Reminds me of my own first startup. The team has what it takes.' },
+      { memberId: 'amanda', decision: 'invest', amount: '$400K', reason: 'Aligned with our impact thesis. Excited about the social potential.' },
+    ]
+
+    mockVotes.forEach((vote, index) => {
+      setTimeout(() => {
+        setVotes((prev) => [...prev, vote])
+        if (index === mockVotes.length - 1) {
+          setCouncilState('complete')
+        }
+      }, index * 1500)
+    })
+  }
+
+  const selectedMemberData = selectedMember ? vcMembers.find((m) => m.id === selectedMember) : null
 
   if (loading) {
     return (
-      <main className="min-h-screen bg-canvas flex items-center justify-center">
+      <div className="min-h-screen bg-canvas flex items-center justify-center">
         <div className="text-center">
-          <Spinner className="w-12 h-12 text-accent-custom mx-auto mb-4" />
-          <p className="text-neutral-custom-subdued">Preparing VC Council...</p>
+          <div className="relative mb-6">
+            <div className="w-20 h-20 rounded-full bg-accent-custom/10 flex items-center justify-center mx-auto">
+              <Users className="w-10 h-10 text-accent-custom animate-pulse" />
+            </div>
+            <div className="absolute inset-0 rounded-full border-4 border-accent-custom/30 border-t-accent-custom animate-spin" />
+          </div>
+          <p className="text-neutral-custom font-medium mb-2">Preparing the VC Council</p>
+          <p className="text-sm text-neutral-custom-subdued">Getting investors ready...</p>
         </div>
-      </main>
-    )
-  }
-
-  if (error) {
-    return (
-      <main className="min-h-screen bg-canvas flex items-center justify-center p-8">
-        <Card className="max-w-md w-full">
-          <CardContent className="p-6 text-center">
-            <p className="text-red-600 mb-4">{error}</p>
-            <Link href="/upload">
-              <Button variant="outline">Go Back</Button>
-            </Link>
-          </CardContent>
-        </Card>
-      </main>
+      </div>
     )
   }
 
   return (
-    <main className="min-h-screen bg-canvas">
-      {/* Header */}
-      <header className="bg-white border-b border-neutral-200 px-4 py-3">
-        <div className="max-w-7xl mx-auto flex items-center justify-between">
-          <div className="flex items-center gap-4">
-            <Link
-              href={`/session/${sessionId}`}
-              className="text-neutral-custom-subdued hover:text-neutral-custom text-sm"
-            >
-              &larr; Back to Pitch Room
-            </Link>
-            <div className="h-6 w-px bg-neutral-200" />
-            <span className="text-lg font-bold text-neutral-custom">VC Council</span>
-          </div>
+    <div className="min-h-screen bg-canvas">
+      <CouncilNav sessionId={sessionId} />
 
-          <div className="flex items-center gap-2">
-            <span className="text-sm bg-purple-100 text-purple-700 px-3 py-1 rounded-full">
-              Discussion {isDiscussionComplete ? 'Complete' : 'In Progress'}
-            </span>
-          </div>
+      <main className="max-w-6xl mx-auto p-6">
+        {/* Progress Indicator */}
+        <CouncilProgress state={councilState} />
+
+        {/* Council Members */}
+        <div className="flex justify-center gap-3 md:gap-4 mb-8 flex-wrap">
+          {vcMembers.map((member) => (
+            <VCAvatar
+              key={member.id}
+              member={member}
+              isSpeaking={speakingMember === member.id}
+              vote={votes.find((v) => v.memberId === member.id)}
+              isSelected={selectedMember === member.id}
+              onClick={() => setSelectedMember(member.id)}
+            />
+          ))}
         </div>
-      </header>
 
-      {/* Main Content */}
-      <div className="max-w-7xl mx-auto p-4">
-        {/* VC Panel */}
-        <Card className="bg-white mb-6">
-          <CardContent className="p-6">
-            <div className="flex justify-around items-start">
-              {VC_CHARACTERS.map((character) => {
-                const vote = votes.find((v) => v.investor_id === character.id)
-                return (
-                  <VCAvatar
-                    key={character.id}
-                    character={character}
-                    isSpeaking={currentSpeaker === character.id}
-                    vote={vote}
-                    size="large"
-                  />
-                )
-              })}
-            </div>
-          </CardContent>
-        </Card>
+        {/* Main Content */}
+        <div className="grid md:grid-cols-3 gap-6">
+          {/* Dialog Panel */}
+          <div className="md:col-span-2">
+            <Card className="bg-white h-[500px] flex flex-col overflow-hidden">
+              <div className="p-4 border-b bg-gradient-to-r from-neutral-custom/5 to-transparent">
+                <div className="flex items-center justify-between">
+                  <h2 className="font-semibold text-neutral-custom flex items-center gap-2">
+                    <MessageCircle className="w-5 h-5 text-accent-custom" />
+                    Council Discussion
+                  </h2>
+                  {councilState !== 'intro' && (
+                    <div className="flex items-center gap-1 text-xs text-neutral-custom-subdued">
+                      <Clock className="w-3 h-3" />
+                      {dialog.length} messages
+                    </div>
+                  )}
+                </div>
+              </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* Dialog Area */}
-          <div className="lg:col-span-2">
-            <Card className="bg-neutral-50 h-[500px] flex flex-col">
-              <CardHeader className="border-b bg-white rounded-t-lg">
-                <CardTitle className="text-lg">Council Discussion</CardTitle>
-              </CardHeader>
-              <CardContent className="flex-1 overflow-y-auto p-4 space-y-4">
-                {dialog.length === 0 ? (
-                  <div className="text-center text-neutral-custom-subdued py-8">
-                    <Spinner className="w-8 h-8 mx-auto mb-4 text-accent-custom" />
-                    <p>Council discussion starting...</p>
+              <div ref={dialogRef} className="flex-1 overflow-y-auto p-4 space-y-4 bg-gradient-to-b from-white to-neutral-custom/5">
+                {councilState === 'intro' && (
+                  <div className="h-full flex flex-col items-center justify-center text-center px-6">
+                    <div className="w-16 h-16 rounded-2xl bg-accent-custom/10 flex items-center justify-center mb-4">
+                      <Users className="w-8 h-8 text-accent-custom" />
+                    </div>
+                    <h3 className="text-lg font-semibold text-neutral-custom mb-2">
+                      The VC Council is Ready
+                    </h3>
+                    <p className="text-neutral-custom-subdued mb-6 max-w-sm">
+                      5 experienced investors will evaluate your pitch deck and provide feedback.
+                      Each has a unique perspective and investment style.
+                    </p>
+                    <Button
+                      onClick={startDiscussion}
+                      size="lg"
+                      className="bg-accent-custom hover:bg-accent-custom-baseline text-white shadow-lg hover:shadow-xl transition-all"
+                    >
+                      <Zap className="w-4 h-4 mr-2" />
+                      Start Council Review
+                    </Button>
                   </div>
-                ) : (
-                  dialog.map((message, index) => (
-                    <SpeechBubble
-                      key={message.id}
-                      message={message}
-                      character={VC_CHARACTERS.find((c) => c.id === message.speaker_id)}
-                      isLatest={index === dialog.length - 1}
-                    />
-                  ))
                 )}
-                <div ref={dialogEndRef} />
-              </CardContent>
+
+                {dialog.map((msg, index) => {
+                  const member = vcMembers.find((m) => m.id === msg.memberId)
+                  if (!member) return null
+                  return (
+                    <SpeechBubble
+                      key={index}
+                      member={member}
+                      message={msg.message}
+                      isLatest={index === dialog.length - 1}
+                      timestamp={msg.timestamp}
+                    />
+                  )
+                })}
+
+                {speakingMember && (
+                  <div className="flex items-center gap-2 text-neutral-custom-subdued text-sm bg-white rounded-xl p-3 shadow-sm">
+                    <div className="flex gap-1">
+                      <div className="w-2 h-2 bg-accent-custom rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
+                      <div className="w-2 h-2 bg-accent-custom rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
+                      <div className="w-2 h-2 bg-accent-custom rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
+                    </div>
+                    <span>{vcMembers.find((m) => m.id === speakingMember)?.name} is speaking...</span>
+                  </div>
+                )}
+
+                {councilState === 'voting' && votes.length < 5 && (
+                  <div className="flex items-center gap-2 text-neutral-custom-subdued text-sm bg-amber-50 rounded-xl p-3 border border-amber-200">
+                    <Loader2 className="w-4 h-4 animate-spin text-amber-600" />
+                    <span>Council is voting... ({votes.length}/5 votes received)</span>
+                  </div>
+                )}
+
+                {councilState === 'complete' && (
+                  <div className="bg-gradient-to-r from-green-50 to-emerald-50 rounded-xl p-4 border border-green-200">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-full bg-green-500 flex items-center justify-center">
+                        <Award className="w-5 h-5 text-white" />
+                      </div>
+                      <div className="flex-1">
+                        <p className="font-semibold text-green-800">Council Review Complete</p>
+                        <p className="text-sm text-green-600">View the final verdict and investment details</p>
+                      </div>
+                      <Link href={`/verdict/${sessionId}`}>
+                        <Button className="bg-green-600 hover:bg-green-700 text-white">
+                          View Verdict
+                        </Button>
+                      </Link>
+                    </div>
+                  </div>
+                )}
+              </div>
             </Card>
           </div>
 
-          {/* Right Panel */}
-          <div className="space-y-4">
-            {/* Vote Display */}
-            <VoteDisplay votes={votes} />
-
-            {/* Action */}
-            <Card className="bg-white">
-              <CardContent className="p-4">
-                <div className="space-y-3">
-                  {!isDiscussionComplete ? (
-                    <div className="text-center">
-                      <Spinner className="w-6 h-6 mx-auto mb-2 text-accent-custom" />
-                      <p className="text-sm text-neutral-custom-subdued">
-                        Investors are discussing...
-                      </p>
-                    </div>
-                  ) : (
-                    <>
-                      <p className="text-sm text-neutral-custom-subdued text-center">
-                        Discussion complete. You can view the results.
-                      </p>
-                      <Button
-                        onClick={handleGoToVerdict}
-                        className="w-full bg-green-500 hover:bg-green-600"
-                      >
-                        See Results
-                      </Button>
-                    </>
-                  )}
-                </div>
-              </CardContent>
-            </Card>
-
-            {/* Session Info */}
-            <Card className="bg-white">
-              <CardContent className="p-4">
-                <div className="text-sm text-neutral-custom-subdued">
-                  <div className="flex justify-between mb-2">
-                    <span>Session ID:</span>
-                    <span className="font-mono text-xs">{sessionId?.slice(0, 12)}...</span>
+          {/* Vote Summary */}
+          <div>
+            {votes.length > 0 ? (
+              <VoteSummary votes={votes} />
+            ) : (
+              <Card className="bg-white overflow-hidden">
+                <div className="bg-gradient-to-r from-accent-custom/10 to-transparent p-4">
+                  <div className="flex items-center gap-2">
+                    <Clock className="w-5 h-5 text-accent-custom" />
+                    <h3 className="font-semibold text-neutral-custom">Waiting for Votes</h3>
                   </div>
-                  {sessionData?.deck_analysis?.scores?.overall_score && (
-                    <div className="flex justify-between">
-                      <span>Deck Score:</span>
-                      <span className="font-bold text-accent-custom">
-                        {sessionData.deck_analysis.scores.overall_score}/100
-                      </span>
-                    </div>
-                  )}
                 </div>
-              </CardContent>
-            </Card>
+                <CardContent className="p-6 text-center">
+                  <div className="w-12 h-12 rounded-full bg-neutral-custom/5 flex items-center justify-center mx-auto mb-3">
+                    <Users className="w-6 h-6 text-neutral-custom-subdued" />
+                  </div>
+                  <p className="text-sm text-neutral-custom-subdued">
+                    Votes will appear here after the discussion ends
+                  </p>
+                </CardContent>
+              </Card>
+            )}
           </div>
         </div>
-      </div>
+      </main>
 
-      {/* CSS for fade-in animation */}
-      <style jsx global>{`
-        @keyframes fadeIn {
-          from {
-            opacity: 0;
-            transform: translateY(10px);
-          }
-          to {
-            opacity: 1;
-            transform: translateY(0);
-          }
-        }
-        .animate-fadeIn {
-          animation: fadeIn 0.3s ease-out;
-        }
-      `}</style>
-    </main>
+      {/* Member Detail Modal */}
+      {selectedMemberData && (
+        <MemberDetailPanel
+          member={selectedMemberData}
+          onClose={() => setSelectedMember(null)}
+        />
+      )}
+    </div>
   )
 }

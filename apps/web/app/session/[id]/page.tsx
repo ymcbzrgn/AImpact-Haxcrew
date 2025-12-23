@@ -1,345 +1,424 @@
 'use client'
 
-import { useEffect, useState, useRef } from 'react'
-import { useParams, useRouter } from 'next/navigation'
+import { useState, useEffect, useCallback } from 'react'
+import { useParams, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
+import {
+  ChevronLeft,
+  ChevronRight,
+  Mic,
+  MicOff,
+  Clock,
+  MessageSquare,
+  Play,
+  Pause,
+  X,
+  FileText,
+  Users,
+  HelpCircle,
+  CheckCircle,
+  Wifi,
+  WifiOff,
+  Zap,
+  ArrowRight,
+  Maximize,
+  Monitor,
+  Sparkles,
+  Target,
+  Brain,
+} from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardContent } from '@/components/ui/card'
 import { useSessionStore } from '@/stores/session'
-import { apiCall } from '@/lib/api'
+import { useWebSocket, WebSocketMessage } from '@/hooks/useWebSocket'
+import { useAudioCapture } from '@/hooks/useAudioCapture'
 
-// Types
-interface SlideData {
+const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
+
+type SessionPhase = 'setup' | 'practice' | 'qa' | 'council' | 'complete'
+type PracticeMode = 'solo' | 'council' | 'qa'
+
+interface SlideContent {
   slide_number: number
-  image_url?: string
-  text_content?: string
+  content: string
 }
 
 interface SessionData {
   session_id: string
   status: string
-  investor_mode: string
-  current_phase?: 'pitch' | 'qa' | 'council' | 'verdict'
-  current_slide?: number
-  total_slides?: number
-  slides?: SlideData[]
-  deck_analysis?: {
-    scores?: {
-      overall_score?: number
+  slide_contents: SlideContent[] | null
+  deck_analysis: Record<string, unknown>
+}
+
+// Phase configuration with colors
+const phases: { id: SessionPhase; label: string; icon: React.ReactNode; color: string }[] = [
+  { id: 'setup', label: 'Setup', icon: <FileText className="w-4 h-4" />, color: '#8B5CF6' },
+  { id: 'practice', label: 'Practice', icon: <Mic className="w-4 h-4" />, color: '#3B82F6' },
+  { id: 'qa', label: 'Q&A', icon: <HelpCircle className="w-4 h-4" />, color: '#F59E0B' },
+  { id: 'council', label: 'Council', icon: <Users className="w-4 h-4" />, color: '#10B981' },
+  { id: 'complete', label: 'Complete', icon: <CheckCircle className="w-4 h-4" />, color: '#22C55E' },
+]
+
+// Mode configuration
+const modeConfig: Record<PracticeMode, { label: string; icon: React.ReactNode; color: string }> = {
+  solo: { label: 'Solo Practice', icon: <Mic className="w-4 h-4" />, color: '#8B5CF6' },
+  council: { label: 'VC Council', icon: <Users className="w-4 h-4" />, color: '#10B981' },
+  qa: { label: 'Q&A Practice', icon: <Brain className="w-4 h-4" />, color: '#F59E0B' },
+}
+
+// Navbar
+function SessionNav({ mode, sessionId }: { mode: PracticeMode; sessionId: string }) {
+  const config = modeConfig[mode]
+
+  return (
+    <nav className="bg-white border-b px-6 py-3">
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-4">
+          <Link href={`/mode-select?session=${sessionId}`} className="text-neutral-custom-subdued hover:text-neutral-custom transition-colors">
+            <ChevronLeft className="w-5 h-5" />
+          </Link>
+          <div className="flex items-center gap-2">
+            <div className="w-8 h-8 rounded-lg bg-accent-custom flex items-center justify-center">
+              <Zap className="w-5 h-5 text-white" />
+            </div>
+            <span className="font-bold text-xl text-neutral-custom">PitchDrill</span>
+          </div>
+        </div>
+        <div className="flex items-center gap-4">
+          <Link href="/help" className="hidden sm:block text-sm text-neutral-custom-subdued hover:text-neutral-custom transition-colors">
+            Help
+          </Link>
+          <div
+            className="flex items-center gap-2 px-3 py-1.5 rounded-full text-sm font-medium"
+            style={{ backgroundColor: `${config.color}15`, color: config.color }}
+          >
+            {config.icon}
+            {config.label}
+          </div>
+        </div>
+      </div>
+    </nav>
+  )
+}
+
+// Enhanced Timer component
+function Timer({ isRunning, onTimeUpdate }: { isRunning: boolean; onTimeUpdate?: (time: number) => void }) {
+  const [seconds, setSeconds] = useState(0)
+
+  useEffect(() => {
+    let interval: NodeJS.Timeout | null = null
+    if (isRunning) {
+      interval = setInterval(() => {
+        setSeconds((s) => {
+          const newTime = s + 1
+          onTimeUpdate?.(newTime)
+          return newTime
+        })
+      }, 1000)
     }
-    executive_summary?: string
+    return () => {
+      if (interval) clearInterval(interval)
+    }
+  }, [isRunning, onTimeUpdate])
+
+  const formatTime = (totalSeconds: number) => {
+    const mins = Math.floor(totalSeconds / 60)
+    const secs = totalSeconds % 60
+    return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`
   }
-  time_remaining?: number
-}
-
-interface Message {
-  id: string
-  role: 'user' | 'investor'
-  content: string
-  timestamp: Date
-  investor_name?: string
-}
-
-// SVG Icons
-function Spinner({ className }: { className?: string }) {
-  return (
-    <svg className={`animate-spin ${className}`} viewBox="0 0 24 24" fill="none">
-      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-      <path
-        className="opacity-75"
-        fill="currentColor"
-        d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-      />
-    </svg>
-  )
-}
-
-function MicIcon({ className }: { className?: string }) {
-  return (
-    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-      <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z" />
-      <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
-      <line x1="12" y1="19" x2="12" y2="23" />
-      <line x1="8" y1="23" x2="16" y2="23" />
-    </svg>
-  )
-}
-
-function MicOffIcon({ className }: { className?: string }) {
-  return (
-    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-      <line x1="1" y1="1" x2="23" y2="23" />
-      <path d="M9 9v3a3 3 0 0 0 5.12 2.12M15 9.34V4a3 3 0 0 0-5.94-.6" />
-      <path d="M17 16.95A7 7 0 0 1 5 12v-2m14 0v2a7 7 0 0 1-.11 1.23" />
-      <line x1="12" y1="19" x2="12" y2="23" />
-      <line x1="8" y1="23" x2="16" y2="23" />
-    </svg>
-  )
-}
-
-function ChevronLeftIcon({ className }: { className?: string }) {
-  return (
-    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-      <polyline points="15 18 9 12 15 6" />
-    </svg>
-  )
-}
-
-function ChevronRightIcon({ className }: { className?: string }) {
-  return (
-    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-      <polyline points="9 18 15 12 9 6" />
-    </svg>
-  )
-}
-
-function PlayIcon({ className }: { className?: string }) {
-  return (
-    <svg className={className} viewBox="0 0 24 24" fill="currentColor">
-      <polygon points="5 3 19 12 5 21 5 3" />
-    </svg>
-  )
-}
-
-function PauseIcon({ className }: { className?: string }) {
-  return (
-    <svg className={className} viewBox="0 0 24 24" fill="currentColor">
-      <rect x="6" y="4" width="4" height="16" />
-      <rect x="14" y="4" width="4" height="16" />
-    </svg>
-  )
-}
-
-function SendIcon({ className }: { className?: string }) {
-  return (
-    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-      <line x1="22" y1="2" x2="11" y2="13" />
-      <polygon points="22 2 15 22 11 13 2 9 22 2" />
-    </svg>
-  )
-}
-
-function WifiIcon({ className }: { className?: string }) {
-  return (
-    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-      <path d="M5 12.55a11 11 0 0 1 14.08 0" />
-      <path d="M1.42 9a16 16 0 0 1 21.16 0" />
-      <path d="M8.53 16.11a6 6 0 0 1 6.95 0" />
-      <line x1="12" y1="20" x2="12.01" y2="20" />
-    </svg>
-  )
-}
-
-function WifiOffIcon({ className }: { className?: string }) {
-  return (
-    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-      <line x1="1" y1="1" x2="23" y2="23" />
-      <path d="M16.72 11.06A10.94 10.94 0 0 1 19 12.55" />
-      <path d="M5 12.55a10.94 10.94 0 0 1 5.17-2.39" />
-      <path d="M10.71 5.05A16 16 0 0 1 22.58 9" />
-      <path d="M1.42 9a15.91 15.91 0 0 1 4.7-2.88" />
-      <path d="M8.53 16.11a6 6 0 0 1 6.95 0" />
-      <line x1="12" y1="20" x2="12.01" y2="20" />
-    </svg>
-  )
-}
-
-function VideoIcon({ className }: { className?: string }) {
-  return (
-    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-      <polygon points="23 7 16 12 23 17 23 7" />
-      <rect x="1" y="5" width="15" height="14" rx="2" ry="2" />
-    </svg>
-  )
-}
-
-function VideoOffIcon({ className }: { className?: string }) {
-  return (
-    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-      <path d="M16 16v1a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2h2m5.66 0H14a2 2 0 0 1 2 2v3.34l1 1L23 7v10" />
-      <line x1="1" y1="1" x2="23" y2="23" />
-    </svg>
-  )
-}
-
-function UserIcon({ className }: { className?: string }) {
-  return (
-    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-      <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
-      <circle cx="12" cy="7" r="4" />
-    </svg>
-  )
-}
-
-// Phase labels
-const PHASE_LABELS: Record<string, { label: string; color: string }> = {
-  pitch: { label: 'Pitch', color: 'bg-blue-500' },
-  qa: { label: 'Q&A', color: 'bg-amber-500' },
-  council: { label: 'VC Council', color: 'bg-purple-500' },
-  verdict: { label: 'Result', color: 'bg-green-500' },
-}
-
-const MODE_LABELS: Record<string, string> = {
-  shark: 'Shark Mode',
-  friendly: 'Friendly Mode',
-  analyst: 'Analyst Mode',
-}
-
-// Timer Component
-function Timer({
-  initialTime,
-  isRunning,
-  onTimeEnd
-}: {
-  initialTime: number
-  isRunning: boolean
-  onTimeEnd?: () => void
-}) {
-  const [timeLeft, setTimeLeft] = useState(initialTime)
-
-  useEffect(() => {
-    setTimeLeft(initialTime)
-  }, [initialTime])
-
-  useEffect(() => {
-    if (!isRunning || timeLeft <= 0) return
-
-    const timer = setInterval(() => {
-      setTimeLeft((prev) => {
-        if (prev <= 1) {
-          clearInterval(timer)
-          onTimeEnd?.()
-          return 0
-        }
-        return prev - 1
-      })
-    }, 1000)
-
-    return () => clearInterval(timer)
-  }, [isRunning, timeLeft, onTimeEnd])
-
-  const minutes = Math.floor(timeLeft / 60)
-  const seconds = timeLeft % 60
-  const isLow = timeLeft < 60
 
   return (
-    <div className={`font-mono text-2xl font-bold ${isLow ? 'text-red-500 animate-pulse' : 'text-neutral-custom'}`}>
-      {String(minutes).padStart(2, '0')}:{String(seconds).padStart(2, '0')}
+    <div className="flex items-center gap-2 bg-neutral-custom/5 px-4 py-2 rounded-xl">
+      <Clock className={`w-5 h-5 ${isRunning ? 'text-red-500 animate-pulse' : 'text-neutral-custom-subdued'}`} />
+      <span className="text-lg font-mono font-semibold text-neutral-custom">{formatTime(seconds)}</span>
     </div>
   )
 }
 
-// Audio Visualizer Component
-function AudioVisualizer({ isActive }: { isActive: boolean }) {
-  const bars = 5
+// Enhanced Audio Visualizer
+function AudioVisualizer({ isActive, audioLevel = 0 }: { isActive: boolean; audioLevel?: number }) {
+  const bars = 7
+
   return (
-    <div className="flex items-end gap-1 h-8">
-      {Array.from({ length: bars }).map((_, i) => (
+    <div className="flex items-end gap-0.5 h-10 px-3 py-2 bg-neutral-custom/5 rounded-xl">
+      {Array.from({ length: bars }).map((_, i) => {
+        const baseHeight = isActive
+          ? Math.max(15, Math.min(100, audioLevel * (0.5 + Math.random() * 0.5)))
+          : 15
+        return (
+          <div
+            key={i}
+            className={`w-1 rounded-full transition-all duration-75 ${
+              isActive ? 'bg-red-500' : 'bg-neutral-custom/30'
+            }`}
+            style={{
+              height: `${baseHeight}%`,
+              animationDelay: `${i * 50}ms`,
+            }}
+          />
+        )
+      })}
+    </div>
+  )
+}
+
+// Enhanced Phase Indicator
+function PhaseIndicator({ currentPhase }: { currentPhase: SessionPhase }) {
+  const currentIndex = phases.findIndex((p) => p.id === currentPhase)
+
+  return (
+    <div className="flex items-center gap-1">
+      {phases.map((phase, index) => {
+        const isActive = index === currentIndex
+        const isPast = index < currentIndex
+
+        return (
+          <div key={phase.id} className="flex items-center">
+            <div
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-all ${
+                isActive
+                  ? 'text-white shadow-lg'
+                  : isPast
+                  ? 'text-white/80'
+                  : 'bg-neutral-custom/10 text-neutral-custom-subdued'
+              }`}
+              style={{
+                backgroundColor: isActive ? phase.color : isPast ? `${phase.color}80` : undefined,
+              }}
+            >
+              {phase.icon}
+              <span className="hidden md:inline">{phase.label}</span>
+            </div>
+            {index < phases.length - 1 && (
+              <div
+                className={`w-4 h-0.5 mx-0.5 ${
+                  isPast ? 'bg-accent-custom' : 'bg-neutral-custom/10'
+                }`}
+              />
+            )}
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
+// Enhanced Slide Thumbnail
+function SlideThumbnail({
+  slide,
+  index,
+  isActive,
+  onClick,
+}: {
+  slide: SlideContent
+  index: number
+  isActive: boolean
+  onClick: () => void
+}) {
+  return (
+    <button
+      onClick={onClick}
+      className={`w-full p-3 rounded-xl text-left transition-all group ${
+        isActive
+          ? 'bg-accent-custom/10 ring-2 ring-accent-custom shadow-sm'
+          : 'bg-white hover:bg-neutral-custom/5 hover:shadow-sm'
+      }`}
+    >
+      <div className="flex items-start gap-3">
         <div
-          key={i}
-          className={`w-1 bg-accent-custom rounded-full transition-all duration-150 ${
-            isActive ? 'animate-pulse' : ''
-          }`}
-          style={{
-            height: isActive ? `${Math.random() * 24 + 8}px` : '4px',
-            animationDelay: `${i * 0.1}s`,
-          }}
-        />
-      ))}
-    </div>
-  )
-}
-
-// Slide Preview Component
-function SlidePreview({
-  slides,
-  currentSlide,
-  onSlideSelect
-}: {
-  slides: SlideData[]
-  currentSlide: number
-  onSlideSelect: (index: number) => void
-}) {
-  return (
-    <div className="flex gap-2 overflow-x-auto p-2 bg-neutral-100 rounded-lg">
-      {slides.map((slide, index) => (
-        <button
-          key={index}
-          onClick={() => onSlideSelect(index)}
-          className={`flex-shrink-0 w-20 h-14 rounded border-2 transition-all ${
-            currentSlide === index
-              ? 'border-accent-custom ring-2 ring-accent-custom/30'
-              : 'border-transparent hover:border-neutral-300'
+          className={`w-8 h-8 rounded-lg flex items-center justify-center text-sm font-bold flex-shrink-0 transition-all ${
+            isActive
+              ? 'bg-accent-custom text-white'
+              : 'bg-neutral-custom/10 text-neutral-custom group-hover:bg-accent-custom/10 group-hover:text-accent-custom'
           }`}
         >
-          {slide.image_url ? (
-            <img
-              src={slide.image_url}
-              alt={`Slide ${index + 1}`}
-              className="w-full h-full object-cover rounded"
-            />
-          ) : (
-            <div className="w-full h-full bg-white rounded flex items-center justify-center text-xs text-neutral-400">
-              {index + 1}
-            </div>
-          )}
+          {index + 1}
+        </div>
+        <p className="text-xs text-neutral-custom-subdued line-clamp-2 leading-relaxed">
+          {slide.content.slice(0, 60)}...
+        </p>
+      </div>
+    </button>
+  )
+}
+
+// Notes Panel
+function NotesPanel({
+  isOpen,
+  onClose,
+  notes,
+}: {
+  isOpen: boolean
+  onClose: () => void
+  notes: string[]
+}) {
+  if (!isOpen) return null
+
+  return (
+    <div className="fixed inset-y-0 right-0 w-80 bg-white shadow-2xl z-50 flex flex-col animate-in slide-in-from-right duration-200">
+      <div className="flex items-center justify-between p-4 border-b bg-gradient-to-r from-accent-custom/5 to-transparent">
+        <div className="flex items-center gap-2">
+          <Sparkles className="w-5 h-5 text-accent-custom" />
+          <h3 className="font-semibold text-neutral-custom">Live Notes</h3>
+        </div>
+        <button onClick={onClose} className="p-1.5 hover:bg-neutral-custom/10 rounded-lg transition-colors">
+          <X className="w-5 h-5" />
         </button>
-      ))}
+      </div>
+      <div className="flex-1 overflow-y-auto p-4 space-y-3">
+        {notes.length === 0 ? (
+          <div className="text-center py-12">
+            <MessageSquare className="w-12 h-12 text-neutral-custom/20 mx-auto mb-3" />
+            <p className="text-neutral-custom-subdued text-sm">
+              Notes will appear here as you practice
+            </p>
+          </div>
+        ) : (
+          notes.map((note, index) => (
+            <div
+              key={index}
+              className="p-3 bg-gradient-to-r from-accent-custom/5 to-purple-500/5 rounded-xl text-sm text-neutral-custom animate-in slide-in-from-right"
+              style={{ animationDelay: `${index * 50}ms` }}
+            >
+              {note}
+            </div>
+          ))
+        )}
+      </div>
     </div>
   )
 }
 
-// Main Component
+// Main Slide Card
+function SlideCard({
+  slide,
+  currentSlide,
+  totalSlides,
+}: {
+  slide: SlideContent | undefined
+  currentSlide: number
+  totalSlides: number
+}) {
+  return (
+    <Card className="w-full max-w-5xl aspect-[16/9] bg-white shadow-xl overflow-hidden">
+      <div className="h-full flex flex-col">
+        {/* Slide header */}
+        <div className="flex items-center justify-between px-6 py-3 border-b bg-gradient-to-r from-neutral-custom/5 to-transparent">
+          <div className="flex items-center gap-3">
+            <div className="flex items-center gap-1 bg-accent-custom text-white px-3 py-1 rounded-lg text-sm font-semibold">
+              <FileText className="w-4 h-4" />
+              Slide {currentSlide + 1}
+            </div>
+            <span className="text-sm text-neutral-custom-subdued">of {totalSlides}</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <Button variant="ghost" size="sm" className="text-neutral-custom-subdued">
+              <Maximize className="w-4 h-4" />
+            </Button>
+          </div>
+        </div>
+
+        {/* Slide content */}
+        <div className="flex-1 p-8 overflow-y-auto">
+          {slide ? (
+            <div className="prose prose-neutral max-w-none">
+              <p className="text-neutral-custom whitespace-pre-wrap leading-relaxed text-lg">
+                {slide.content}
+              </p>
+            </div>
+          ) : (
+            <div className="h-full flex flex-col items-center justify-center text-neutral-custom-subdued">
+              <Monitor className="w-16 h-16 mb-4 opacity-50" />
+              <p>No slide content available</p>
+            </div>
+          )}
+        </div>
+
+        {/* Slide progress */}
+        <div className="px-6 py-3 border-t bg-neutral-custom/5">
+          <div className="h-1 bg-neutral-custom/10 rounded-full overflow-hidden">
+            <div
+              className="h-full bg-gradient-to-r from-accent-custom to-purple-600 transition-all duration-300"
+              style={{ width: `${((currentSlide + 1) / totalSlides) * 100}%` }}
+            />
+          </div>
+        </div>
+      </div>
+    </Card>
+  )
+}
+
 export default function SessionPage() {
   const params = useParams()
-  const router = useRouter()
+  const searchParams = useSearchParams()
   const sessionId = params.id as string
+  const mode = (searchParams.get('mode') || 'solo') as PracticeMode
 
-  const { investorMode } = useSessionStore()
   const [sessionData, setSessionData] = useState<SessionData | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
-  // Pitch room state
-  const [currentPhase, setCurrentPhase] = useState<'pitch' | 'qa' | 'council' | 'verdict'>('pitch')
   const [currentSlide, setCurrentSlide] = useState(0)
-  const [isTimerRunning, setIsTimerRunning] = useState(false)
-  const [isMicOn, setIsMicOn] = useState(false)
-  const [isCameraOn, setIsCameraOn] = useState(false)
-  const [isConnected, setIsConnected] = useState(false)
-  const [cameraStream, setCameraStream] = useState<MediaStream | null>(null)
-  const videoRef = useRef<HTMLVideoElement>(null)
+  const [phase, setPhase] = useState<SessionPhase>('setup')
+  const [isRecording, setIsRecording] = useState(false)
+  const [isPaused, setIsPaused] = useState(false)
+  const [showNotes, setShowNotes] = useState(false)
+  const [notes, setNotes] = useState<string[]>([])
 
-  // Q&A state
-  const [messages, setMessages] = useState<Message[]>([])
-  const [inputMessage, setInputMessage] = useState('')
-  const messagesEndRef = useRef<HTMLDivElement>(null)
+  // Zustand store
+  const { setStatus } = useSessionStore()
 
-  // Mock slides for demo
-  const mockSlides: SlideData[] = Array.from({ length: 10 }, (_, i) => ({
-    slide_number: i + 1,
-    text_content: `Slide ${i + 1}`,
-  }))
-
-  useEffect(() => {
-    async function fetchSession() {
-      try {
-        const response = await apiCall<SessionData>(`/api/session/${sessionId}`)
-        if (response.success && response.data) {
-          setSessionData(response.data)
-          if (response.data.current_phase) {
-            setCurrentPhase(response.data.current_phase)
-          }
-          if (response.data.current_slide !== undefined) {
-            setCurrentSlide(response.data.current_slide)
-          }
-          // Simulate connection
-          setTimeout(() => setIsConnected(true), 1000)
-        } else {
-          setError(response.error?.message || 'Session not found')
+  // Handle WebSocket messages
+  const handleWebSocketMessage = useCallback((message: WebSocketMessage) => {
+    switch (message.type) {
+      case 'realtime_note':
+        if (message.data?.note) {
+          setNotes((prev) => [...prev, message.data.note])
         }
-      } catch (err) {
-        setError('Connection error')
+        break
+    }
+  }, [])
+
+  // WebSocket hook
+  const {
+    isConnected,
+    isReconnecting,
+    sendAudioChunk,
+  } = useWebSocket({
+    sessionId,
+    autoConnect: false,
+    onMessage: handleWebSocketMessage,
+  })
+
+  // Audio capture hook
+  const {
+    audioLevel,
+    startRecording: startAudioRecording,
+    stopRecording: stopAudioRecording,
+    pauseRecording: pauseAudioRecording,
+    resumeRecording: resumeAudioRecording,
+  } = useAudioCapture({
+    onAudioChunk: (chunk) => {
+      if (isConnected) {
+        sendAudioChunk(chunk)
+      }
+    },
+  })
+
+  // Fetch session data
+  useEffect(() => {
+    const fetchSession = async () => {
+      try {
+        const response = await fetch(`${API_URL}/api/session/${sessionId}`)
+        const data = await response.json()
+
+        if (data.success) {
+          setSessionData(data.data)
+        } else {
+          setError(data.error?.message || 'Failed to load session')
+        }
+      } catch {
+        setError('Failed to connect to server')
       } finally {
         setLoading(false)
       }
@@ -350,496 +429,264 @@ export default function SessionPage() {
     }
   }, [sessionId])
 
-  // Auto-scroll messages
+  const slides = sessionData?.slide_contents || []
+  const totalSlides = slides.length
+
+  const goToSlide = (index: number) => {
+    if (index >= 0 && index < totalSlides) {
+      setCurrentSlide(index)
+    }
+  }
+
+  const nextSlide = () => goToSlide(currentSlide + 1)
+  const prevSlide = () => goToSlide(currentSlide - 1)
+
+  const startPractice = async () => {
+    setPhase('practice')
+    setStatus('pitching')
+    setIsRecording(true)
+    await startAudioRecording()
+  }
+
+  const toggleRecording = () => {
+    if (isRecording) {
+      if (isPaused) {
+        resumeAudioRecording()
+      } else {
+        pauseAudioRecording()
+      }
+      setIsPaused(!isPaused)
+    }
+  }
+
+  const endPractice = () => {
+    setIsRecording(false)
+    stopAudioRecording()
+    setStatus('qa')
+    setPhase('qa')
+  }
+
+  // Keyboard navigation
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
-  }, [messages])
-
-  const handlePrevSlide = () => {
-    setCurrentSlide((prev) => Math.max(0, prev - 1))
-  }
-
-  const handleNextSlide = () => {
-    const totalSlides = sessionData?.slides?.length || mockSlides.length
-    setCurrentSlide((prev) => Math.min(totalSlides - 1, prev + 1))
-  }
-
-  const handleToggleMic = async () => {
-    if (!isMicOn) {
-      try {
-        await navigator.mediaDevices.getUserMedia({ audio: true })
-        setIsMicOn(true)
-      } catch (err) {
-        console.error('Microphone permission denied')
-      }
-    } else {
-      setIsMicOn(false)
-    }
-  }
-
-  const handleToggleCamera = async () => {
-    if (!isCameraOn) {
-      try {
-        const stream = await navigator.mediaDevices.getUserMedia({ video: true })
-        setCameraStream(stream)
-        setIsCameraOn(true)
-        if (videoRef.current) {
-          videoRef.current.srcObject = stream
-        }
-      } catch (err) {
-        console.error('Camera permission denied')
-      }
-    } else {
-      // Stop camera stream
-      if (cameraStream) {
-        cameraStream.getTracks().forEach(track => track.stop())
-        setCameraStream(null)
-      }
-      setIsCameraOn(false)
-    }
-  }
-
-  // Connect camera stream to video element
-  useEffect(() => {
-    if (videoRef.current && cameraStream) {
-      videoRef.current.srcObject = cameraStream
-    }
-  }, [cameraStream])
-
-  // Cleanup camera stream on unmount
-  useEffect(() => {
-    return () => {
-      if (cameraStream) {
-        cameraStream.getTracks().forEach(track => track.stop())
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'ArrowRight') nextSlide()
+      if (e.key === 'ArrowLeft') prevSlide()
+      if (e.key === ' ' && phase === 'practice') {
+        e.preventDefault()
+        toggleRecording()
       }
     }
-  }, [cameraStream])
 
-  const handleSendMessage = () => {
-    if (!inputMessage.trim()) return
-
-    const newMessage: Message = {
-      id: Date.now().toString(),
-      role: 'user',
-      content: inputMessage,
-      timestamp: new Date(),
-    }
-    setMessages((prev) => [...prev, newMessage])
-    setInputMessage('')
-
-    // Simulate investor response
-    setTimeout(() => {
-      const investorResponse: Message = {
-        id: (Date.now() + 1).toString(),
-        role: 'investor',
-        content: 'Interesting point. What do you think about the scalability of this approach?',
-        timestamp: new Date(),
-        investor_name: 'VC Panel',
-      }
-      setMessages((prev) => [...prev, investorResponse])
-    }, 2000)
-  }
-
-  const handleStartPitch = () => {
-    setIsTimerRunning(true)
-    setCurrentPhase('pitch')
-  }
-
-  const handleEndPitch = () => {
-    setIsTimerRunning(false)
-    setCurrentPhase('qa')
-  }
-
-  const handleGoToCouncil = () => {
-    router.push(`/council/${sessionId}`)
-  }
-
-  const handleGoToVerdict = () => {
-    router.push(`/verdict/${sessionId}`)
-  }
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [currentSlide, phase, isRecording, isPaused])
 
   if (loading) {
     return (
-      <main className="min-h-screen bg-canvas flex items-center justify-center">
+      <div className="min-h-screen bg-canvas flex items-center justify-center">
         <div className="text-center">
-          <Spinner className="w-12 h-12 text-accent-custom mx-auto mb-4" />
-          <p className="text-neutral-custom-subdued">Preparing pitch room...</p>
+          <div className="relative mb-6">
+            <div className="w-16 h-16 rounded-full bg-accent-custom/10 flex items-center justify-center mx-auto">
+              <Target className="w-8 h-8 text-accent-custom animate-pulse" />
+            </div>
+            <div className="absolute inset-0 rounded-full border-4 border-accent-custom/30 border-t-accent-custom animate-spin" />
+          </div>
+          <p className="text-neutral-custom font-medium">Loading session...</p>
         </div>
-      </main>
+      </div>
     )
   }
 
   if (error) {
     return (
-      <main className="min-h-screen bg-canvas flex items-center justify-center p-8">
+      <div className="min-h-screen bg-canvas flex items-center justify-center p-6">
         <Card className="max-w-md w-full">
-          <CardContent className="p-6 text-center">
-            <p className="text-red-600 mb-4">{error}</p>
+          <CardContent className="p-8 text-center">
+            <div className="w-16 h-16 rounded-full bg-red-100 flex items-center justify-center mx-auto mb-4">
+              <X className="w-8 h-8 text-red-500" />
+            </div>
+            <h2 className="text-xl font-semibold text-neutral-custom mb-2">Session Not Found</h2>
+            <p className="text-neutral-custom-subdued mb-6">{error}</p>
             <Link href="/upload">
-              <Button variant="outline">Go Back</Button>
+              <Button className="bg-accent-custom hover:bg-accent-custom-baseline text-white">
+                Upload a Deck
+              </Button>
             </Link>
           </CardContent>
         </Card>
-      </main>
+      </div>
     )
   }
 
-  // Store'daki mode öncelikli (kullanıcı seçimi), sonra backend, sonra default
-  const mode = investorMode || sessionData?.investor_mode || 'friendly'
-  const overallScore = sessionData?.deck_analysis?.scores?.overall_score
-  const slides = sessionData?.slides || mockSlides
-  const totalSlides = slides.length
-  const phaseInfo = PHASE_LABELS[currentPhase]
-
   return (
-    <main className="min-h-screen bg-canvas">
-      {/* Header */}
-      <header className="bg-white border-b border-neutral-200 px-4 py-3">
-        <div className="max-w-7xl mx-auto flex items-center justify-between">
-          <div className="flex items-center gap-4">
-            <Link
-              href="/upload"
-              className="text-neutral-custom-subdued hover:text-neutral-custom text-sm"
+    <div className="min-h-screen bg-canvas flex flex-col">
+      <SessionNav mode={mode} sessionId={sessionId} />
+
+      {/* Phase indicator bar */}
+      <div className="bg-white border-b px-6 py-3">
+        <div className="flex items-center justify-between">
+          <PhaseIndicator currentPhase={phase} />
+          {/* Connection status */}
+          {phase !== 'setup' && (
+            <div
+              className={`flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-full ${
+                isConnected
+                  ? 'bg-green-100 text-green-700'
+                  : isReconnecting
+                  ? 'bg-yellow-100 text-yellow-700'
+                  : 'bg-gray-100 text-gray-500'
+              }`}
             >
-              &larr; Exit
-            </Link>
-            <div className="h-6 w-px bg-neutral-200" />
-            <span className="text-sm font-medium text-neutral-custom">
-              Session: {sessionId?.slice(0, 8)}...
-            </span>
-          </div>
-
-          <div className="flex items-center gap-4">
-            {/* Connection Status */}
-            <div className={`flex items-center gap-2 text-sm ${isConnected ? 'text-green-600' : 'text-red-500'}`}>
-              {isConnected ? <WifiIcon className="w-4 h-4" /> : <WifiOffIcon className="w-4 h-4" />}
-              {isConnected ? 'Connected' : 'Connecting...'}
+              {isConnected ? <Wifi className="w-3 h-3" /> : <WifiOff className="w-3 h-3" />}
+              <span>{isConnected ? 'Live' : isReconnecting ? 'Reconnecting...' : 'Offline'}</span>
             </div>
-
-            {/* Mode Badge */}
-            <span className="text-sm font-normal bg-accent-custom/10 text-accent-custom px-3 py-1 rounded-full">
-              {MODE_LABELS[mode] || mode}
-            </span>
-
-            {/* Score Badge */}
-            {overallScore && (
-              <span className="text-sm font-bold bg-green-100 text-green-700 px-3 py-1 rounded-full">
-                Score: {overallScore}/100
-              </span>
-            )}
-          </div>
-        </div>
-      </header>
-
-      {/* Phase Indicator */}
-      <div className="bg-white border-b border-neutral-200 px-4 py-2">
-        <div className="max-w-7xl mx-auto flex items-center justify-center gap-2">
-          {Object.entries(PHASE_LABELS).map(([key, value], index) => (
-            <div key={key} className="flex items-center">
-              <div
-                className={`flex items-center gap-2 px-4 py-2 rounded-full text-sm font-medium transition-all ${
-                  currentPhase === key
-                    ? `${value.color} text-white`
-                    : 'bg-neutral-100 text-neutral-400'
-                }`}
-              >
-                <span className="w-6 h-6 rounded-full bg-white/20 flex items-center justify-center text-xs">
-                  {index + 1}
-                </span>
-                {value.label}
-              </div>
-              {index < Object.keys(PHASE_LABELS).length - 1 && (
-                <div className="w-8 h-0.5 bg-neutral-200 mx-1" />
-              )}
-            </div>
-          ))}
+          )}
         </div>
       </div>
 
       {/* Main Content */}
-      <div className="max-w-7xl mx-auto p-4 grid grid-cols-1 lg:grid-cols-3 gap-4">
-        {/* Left Panel - Slide Preview */}
-        <div className="lg:col-span-2 space-y-4">
-          {/* Main Slide View */}
-          <Card className="bg-white">
-            <CardContent className="p-0">
-              <div className="aspect-video bg-neutral-900 rounded-t-lg flex items-center justify-center relative">
-                {slides[currentSlide]?.image_url ? (
-                  <img
-                    src={slides[currentSlide].image_url}
-                    alt={`Slide ${currentSlide + 1}`}
-                    className="w-full h-full object-contain"
-                  />
-                ) : (
-                  <div className="text-white text-center">
-                    <div className="text-6xl font-bold mb-4">{currentSlide + 1}</div>
-                    <div className="text-neutral-400">Slide {currentSlide + 1} / {totalSlides}</div>
-                  </div>
-                )}
-
-                {/* Slide Navigation Overlay */}
-                <button
-                  onClick={handlePrevSlide}
-                  disabled={currentSlide === 0}
-                  className="absolute left-4 top-1/2 -translate-y-1/2 w-10 h-10 bg-black/50 hover:bg-black/70 rounded-full flex items-center justify-center text-white disabled:opacity-30 disabled:cursor-not-allowed transition-all"
-                >
-                  <ChevronLeftIcon className="w-6 h-6" />
-                </button>
-                <button
-                  onClick={handleNextSlide}
-                  disabled={currentSlide === totalSlides - 1}
-                  className="absolute right-4 top-1/2 -translate-y-1/2 w-10 h-10 bg-black/50 hover:bg-black/70 rounded-full flex items-center justify-center text-white disabled:opacity-30 disabled:cursor-not-allowed transition-all"
-                >
-                  <ChevronRightIcon className="w-6 h-6" />
-                </button>
-
-                {/* Current Slide Indicator */}
-                <div className="absolute bottom-4 left-1/2 -translate-x-1/2 bg-black/70 text-white px-4 py-2 rounded-full text-sm">
-                  {currentSlide + 1} / {totalSlides}
-                </div>
-              </div>
-
-              {/* Slide Thumbnails */}
-              <div className="p-4">
-                <SlidePreview
-                  slides={slides}
-                  currentSlide={currentSlide}
-                  onSlideSelect={setCurrentSlide}
+      <div className="flex-1 flex overflow-hidden">
+        {/* Slide Thumbnails - Left Sidebar */}
+        <aside className="w-72 bg-neutral-custom/5 border-r overflow-y-auto hidden lg:block">
+          <div className="p-4">
+            <div className="flex items-center gap-2 mb-4">
+              <FileText className="w-4 h-4 text-accent-custom" />
+              <h2 className="text-sm font-semibold text-neutral-custom">Slides</h2>
+              <span className="text-xs text-neutral-custom-subdued bg-neutral-custom/10 px-2 py-0.5 rounded-full">
+                {totalSlides}
+              </span>
+            </div>
+            <div className="space-y-2">
+              {slides.map((slide, index) => (
+                <SlideThumbnail
+                  key={slide.slide_number}
+                  slide={slide}
+                  index={index}
+                  isActive={index === currentSlide}
+                  onClick={() => goToSlide(index)}
                 />
-              </div>
-            </CardContent>
-          </Card>
+              ))}
+            </div>
+          </div>
+        </aside>
 
-          {/* Media Controls */}
-          <Card className="bg-white">
-            <CardContent className="p-4">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-4">
-                  {/* Microphone Toggle */}
-                  <button
-                    onClick={handleToggleMic}
-                    className={`w-12 h-12 rounded-full flex items-center justify-center transition-all ${
-                      isMicOn
-                        ? 'bg-red-500 hover:bg-red-600 text-white'
-                        : 'bg-neutral-200 hover:bg-neutral-300 text-neutral-600'
-                    }`}
-                    title={isMicOn ? 'Turn off microphone' : 'Turn on microphone'}
-                  >
-                    {isMicOn ? <MicIcon className="w-6 h-6" /> : <MicOffIcon className="w-6 h-6" />}
-                  </button>
+        {/* Main Slide View */}
+        <main className="flex-1 flex flex-col">
+          {/* Slide Content */}
+          <div className="flex-1 p-6 flex items-center justify-center overflow-hidden">
+            <SlideCard
+              slide={slides[currentSlide]}
+              currentSlide={currentSlide}
+              totalSlides={totalSlides}
+            />
+          </div>
 
-                  {/* Camera Toggle */}
-                  <button
-                    onClick={handleToggleCamera}
-                    className={`w-12 h-12 rounded-full flex items-center justify-center transition-all ${
-                      isCameraOn
-                        ? 'bg-blue-500 hover:bg-blue-600 text-white'
-                        : 'bg-neutral-200 hover:bg-neutral-300 text-neutral-600'
-                    }`}
-                    title={isCameraOn ? 'Turn off camera' : 'Turn on camera'}
-                  >
-                    {isCameraOn ? <VideoIcon className="w-6 h-6" /> : <VideoOffIcon className="w-6 h-6" />}
-                  </button>
-
-                  <div>
-                    <div className="text-sm font-medium text-neutral-custom">
-                      {isMicOn && isCameraOn ? 'Mic & Camera On' :
-                       isMicOn ? 'Microphone On' :
-                       isCameraOn ? 'Camera On' : 'Media Off'}
-                    </div>
-                    <div className="text-xs text-neutral-custom-subdued">
-                      {isMicOn || isCameraOn ? 'Click buttons to toggle' : 'Enable mic and camera to pitch'}
-                    </div>
-                  </div>
-                  {isMicOn && <AudioVisualizer isActive={isMicOn} />}
+          {/* Controls */}
+          <div className="bg-white border-t p-4 shadow-lg">
+            <div className="max-w-5xl mx-auto flex items-center justify-between gap-4">
+              {/* Navigation */}
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="outline"
+                  size="icon"
+                  onClick={prevSlide}
+                  disabled={currentSlide === 0}
+                  className="rounded-xl"
+                >
+                  <ChevronLeft className="w-5 h-5" />
+                </Button>
+                <div className="px-4 py-2 bg-neutral-custom/5 rounded-xl">
+                  <span className="text-sm font-medium text-neutral-custom">
+                    {currentSlide + 1} / {totalSlides}
+                  </span>
                 </div>
-
-                <div className="flex items-center gap-4">
-                  <Timer
-                    initialTime={sessionData?.time_remaining || 300}
-                    isRunning={isTimerRunning}
-                    onTimeEnd={handleEndPitch}
-                  />
-                  <button
-                    onClick={isTimerRunning ? handleEndPitch : handleStartPitch}
-                    className={`px-4 py-2 rounded-lg font-medium transition-all ${
-                      isTimerRunning
-                        ? 'bg-red-500 hover:bg-red-600 text-white'
-                        : 'bg-accent-custom hover:bg-accent-custom/90 text-white'
-                    }`}
-                  >
-                    {isTimerRunning ? (
-                      <span className="flex items-center gap-2">
-                        <PauseIcon className="w-4 h-4" /> End
-                      </span>
-                    ) : (
-                      <span className="flex items-center gap-2">
-                        <PlayIcon className="w-4 h-4" /> Start
-                      </span>
-                    )}
-                  </button>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Camera Preview */}
-          {isCameraOn && (
-            <Card className="bg-white">
-              <CardHeader className="pb-2">
-                <CardTitle className="text-sm flex items-center gap-2">
-                  <VideoIcon className="w-4 h-4" />
-                  Camera Preview
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="p-4 pt-0">
-                <div className="relative aspect-video bg-neutral-900 rounded-lg overflow-hidden">
-                  <video
-                    ref={videoRef}
-                    autoPlay
-                    playsInline
-                    muted
-                    className="w-full h-full object-cover transform scale-x-[-1]"
-                  />
-                  <div className="absolute bottom-2 left-2 bg-black/50 text-white text-xs px-2 py-1 rounded">
-                    You
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          )}
-
-          {/* Camera Off Placeholder */}
-          {!isCameraOn && (
-            <Card className="bg-white">
-              <CardHeader className="pb-2">
-                <CardTitle className="text-sm flex items-center gap-2">
-                  <VideoOffIcon className="w-4 h-4" />
-                  Camera Preview
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="p-4 pt-0">
-                <div className="aspect-video bg-neutral-100 rounded-lg flex flex-col items-center justify-center">
-                  <UserIcon className="w-12 h-12 text-neutral-400 mb-2" />
-                  <p className="text-sm text-neutral-500">Camera is off</p>
-                  <button
-                    onClick={handleToggleCamera}
-                    className="mt-2 text-xs text-accent-custom hover:underline"
-                  >
-                    Turn on camera
-                  </button>
-                </div>
-              </CardContent>
-            </Card>
-          )}
-        </div>
-
-        {/* Right Panel - Q&A / Chat */}
-        <div className="space-y-4">
-          <Card className="bg-white h-[600px] flex flex-col">
-            <CardHeader className="border-b">
-              <CardTitle className="text-lg flex items-center justify-between">
-                <span>Q&A</span>
-                <span className={`text-xs px-2 py-1 rounded-full ${
-                  currentPhase === 'qa' ? 'bg-amber-100 text-amber-700' : 'bg-neutral-100 text-neutral-500'
-                }`}>
-                  {currentPhase === 'qa' ? 'Active' : 'Waiting'}
-                </span>
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="flex-1 overflow-hidden p-0 flex flex-col">
-              {/* Messages */}
-              <div className="flex-1 overflow-y-auto p-4 space-y-4">
-                {messages.length === 0 ? (
-                  <div className="text-center text-neutral-custom-subdued py-8">
-                    <p>No messages yet.</p>
-                    <p className="text-sm mt-2">Questions will come after you complete your pitch.</p>
-                  </div>
-                ) : (
-                  messages.map((message) => (
-                    <div
-                      key={message.id}
-                      className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}
-                    >
-                      <div
-                        className={`max-w-[80%] rounded-lg px-4 py-2 ${
-                          message.role === 'user'
-                            ? 'bg-accent-custom text-white'
-                            : 'bg-neutral-100 text-neutral-custom'
-                        }`}
-                      >
-                        {message.role === 'investor' && message.investor_name && (
-                          <div className="text-xs font-medium mb-1 text-accent-custom">
-                            {message.investor_name}
-                          </div>
-                        )}
-                        <p className="text-sm">{message.content}</p>
-                      </div>
-                    </div>
-                  ))
-                )}
-                <div ref={messagesEndRef} />
+                <Button
+                  variant="outline"
+                  size="icon"
+                  onClick={nextSlide}
+                  disabled={currentSlide === totalSlides - 1}
+                  className="rounded-xl"
+                >
+                  <ChevronRight className="w-5 h-5" />
+                </Button>
               </div>
 
-              {/* Input */}
-              <div className="p-4 border-t">
-                <div className="flex gap-2">
-                  <input
-                    type="text"
-                    value={inputMessage}
-                    onChange={(e) => setInputMessage(e.target.value)}
-                    onKeyPress={(e) => e.key === 'Enter' && handleSendMessage()}
-                    placeholder="Type your answer..."
-                    className="flex-1 px-4 py-2 border border-neutral-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-accent-custom/50"
-                    disabled={currentPhase !== 'qa'}
-                  />
+              {/* Center Controls */}
+              <div className="flex items-center gap-3">
+                {phase === 'setup' && (
                   <Button
-                    onClick={handleSendMessage}
-                    disabled={!inputMessage.trim() || currentPhase !== 'qa'}
-                    className="bg-accent-custom hover:bg-accent-custom/90"
+                    onClick={startPractice}
+                    size="lg"
+                    className="bg-accent-custom hover:bg-accent-custom-baseline text-white px-8 shadow-lg"
                   >
-                    <SendIcon className="w-4 h-4" />
+                    <Play className="w-5 h-5 mr-2" />
+                    Start Practice
                   </Button>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Phase Actions */}
-          <Card className="bg-white">
-            <CardContent className="p-4">
-              <div className="space-y-3">
-                {currentPhase === 'pitch' && (
-                  <p className="text-sm text-neutral-custom-subdued text-center">
-                    Present your pitch. When time runs out, you'll move to Q&A.
-                  </p>
                 )}
-                {currentPhase === 'qa' && (
+
+                {phase === 'practice' && (
                   <>
-                    <p className="text-sm text-neutral-custom-subdued text-center">
-                      Answer investor questions.
-                    </p>
+                    <Timer isRunning={isRecording && !isPaused} />
+                    <div className="flex items-center gap-1 bg-neutral-custom/5 p-1 rounded-xl">
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={toggleRecording}
+                        className={`rounded-lg ${!isPaused ? 'text-neutral-custom' : 'text-accent-custom'}`}
+                      >
+                        {isPaused ? <Play className="w-5 h-5" /> : <Pause className="w-5 h-5" />}
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className={`rounded-lg ${isRecording && !isPaused ? 'text-red-500' : 'text-neutral-custom-subdued'}`}
+                      >
+                        {isRecording && !isPaused ? (
+                          <Mic className="w-5 h-5 animate-pulse" />
+                        ) : (
+                          <MicOff className="w-5 h-5" />
+                        )}
+                      </Button>
+                    </div>
+                    <AudioVisualizer isActive={isRecording && !isPaused} audioLevel={audioLevel} />
                     <Button
-                      onClick={handleGoToCouncil}
-                      className="w-full bg-purple-500 hover:bg-purple-600"
+                      onClick={endPractice}
+                      className="bg-gradient-to-r from-accent-custom to-purple-600 hover:from-accent-custom-baseline hover:to-purple-700 text-white shadow-lg"
                     >
-                      Go to VC Council
+                      End Practice
+                      <ArrowRight className="w-4 h-4 ml-2" />
                     </Button>
                   </>
                 )}
-                {currentPhase === 'council' && (
-                  <Button
-                    onClick={handleGoToVerdict}
-                    className="w-full bg-green-500 hover:bg-green-600"
-                  >
-                    See Results
-                  </Button>
+
+                {phase === 'qa' && (
+                  <Link href={`/council/${sessionId}`}>
+                    <Button size="lg" className="bg-gradient-to-r from-accent-custom to-purple-600 text-white px-8 shadow-lg">
+                      <Users className="w-5 h-5 mr-2" />
+                      Go to VC Council
+                    </Button>
+                  </Link>
                 )}
               </div>
-            </CardContent>
-          </Card>
-        </div>
+
+              {/* Right Controls */}
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="outline"
+                  size="icon"
+                  onClick={() => setShowNotes(!showNotes)}
+                  className={`rounded-xl ${showNotes ? 'bg-accent-custom/10 text-accent-custom' : ''}`}
+                >
+                  <MessageSquare className="w-5 h-5" />
+                </Button>
+              </div>
+            </div>
+          </div>
+        </main>
       </div>
-    </main>
+
+      {/* Notes Panel */}
+      <NotesPanel isOpen={showNotes} onClose={() => setShowNotes(false)} notes={notes} />
+    </div>
   )
 }

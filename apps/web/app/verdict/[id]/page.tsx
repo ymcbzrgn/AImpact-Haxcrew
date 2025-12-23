@@ -1,658 +1,693 @@
 'use client'
 
-import { useEffect, useState } from 'react'
-import { useParams, useRouter } from 'next/navigation'
+import { useState, useEffect } from 'react'
+import { useParams } from 'next/navigation'
 import Link from 'next/link'
+import {
+  Trophy,
+  TrendingUp,
+  Target,
+  Users,
+  Lightbulb,
+  DollarSign,
+  Share2,
+  Download,
+  RefreshCw,
+  ChevronRight,
+  Star,
+  CheckCircle,
+  AlertCircle,
+  Zap,
+  Award,
+  FileText,
+  ArrowRight,
+  Sparkles,
+  BarChart3,
+  Clock,
+  ThumbsUp,
+  ThumbsDown,
+  Check,
+} from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { apiCall } from '@/lib/api'
-import { useSessionStore } from '@/stores/session'
+import { Card, CardContent } from '@/components/ui/card'
 
-// Types
+// API_URL will be used when integrating with backend
+// const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
+
 interface CategoryScore {
   name: string
   score: number
+  icon: React.ReactNode
   feedback: string
+  strengths: string[]
+  improvements: string[]
+  color: string
 }
 
 interface TermSheet {
+  totalRaised: string
+  leadInvestor: string
   valuation: string
-  investment_amount: string
-  equity_percentage: string
-  board_seats: number
-  special_terms?: string[]
+  terms: string[]
 }
 
-interface FeedbackItem {
-  category: string
-  type: 'strength' | 'weakness' | 'suggestion'
-  content: string
-}
-
-interface VerdictData {
-  session_id: string
+interface InvestorVote {
+  name: string
+  firm: string
+  avatar: string
   decision: 'invest' | 'pass'
-  final_score: number
-  confidence: number
-  investor_votes: {
-    invest: number
-    pass: number
-  }
-  term_sheet?: TermSheet
-  category_scores: CategoryScore[]
-  feedback: FeedbackItem[]
-  investor_pool_eligible: boolean
+  amount?: string
+  color: string
 }
 
-interface SessionData {
-  session_id: string
-  status: string
-  investor_mode: string
-  deck_analysis?: {
-    scores?: {
-      overall_score?: number
-    }
-    categories?: Record<string, { score?: number }>
-  }
-}
-
-// SVG Icons
-function Spinner({ className }: { className?: string }) {
+// Navbar component
+function VerdictNav() {
   return (
-    <svg className={`animate-spin ${className}`} viewBox="0 0 24 24" fill="none">
-      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-      <path
-        className="opacity-75"
-        fill="currentColor"
-        d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+    <nav className="bg-white border-b px-6 py-4">
+      <div className="max-w-5xl mx-auto flex items-center justify-between">
+        <Link href="/" className="flex items-center gap-2">
+          <div className="w-8 h-8 rounded-lg bg-accent-custom flex items-center justify-center">
+            <Zap className="w-5 h-5 text-white" />
+          </div>
+          <span className="font-bold text-xl text-neutral-custom">PitchDrill</span>
+        </Link>
+        <div className="flex items-center gap-4">
+          <Link href="/dashboard" className="hidden sm:block text-sm text-neutral-custom-subdued hover:text-neutral-custom transition-colors">
+            Dashboard
+          </Link>
+          <Link href="/help" className="hidden sm:block text-sm text-neutral-custom-subdued hover:text-neutral-custom transition-colors">
+            Help
+          </Link>
+          <div className="flex items-center gap-1 text-xs text-neutral-custom-subdued bg-neutral-custom/5 px-3 py-1.5 rounded-full">
+            <Trophy className="w-3 h-3" />
+            Final Verdict
+          </div>
+        </div>
+      </div>
+    </nav>
+  )
+}
+
+// Animated Score Circle component
+function AnimatedScoreCircle({
+  score,
+  size = 'large',
+  delay = 0
+}: {
+  score: number
+  size?: 'large' | 'medium' | 'small'
+  delay?: number
+}) {
+  const [animatedScore, setAnimatedScore] = useState(0)
+  const [isVisible, setIsVisible] = useState(false)
+
+  const sizeConfig = {
+    large: { radius: 85, stroke: 12, svgSize: 220, textSize: 'text-5xl', gradeSize: 'text-xl' },
+    medium: { radius: 50, stroke: 8, svgSize: 130, textSize: 'text-3xl', gradeSize: 'text-base' },
+    small: { radius: 32, stroke: 6, svgSize: 80, textSize: 'text-xl', gradeSize: 'text-xs' },
+  }
+
+  const config = sizeConfig[size]
+  const circumference = 2 * Math.PI * config.radius
+  const strokeDashoffset = circumference - (animatedScore / 100) * circumference
+
+  const getGrade = (score: number) => {
+    if (score >= 90) return { grade: 'A+', color: '#22c55e', bg: 'from-green-400 to-emerald-600' }
+    if (score >= 80) return { grade: 'A', color: '#22c55e', bg: 'from-green-400 to-emerald-600' }
+    if (score >= 70) return { grade: 'B+', color: '#84cc16', bg: 'from-lime-400 to-green-600' }
+    if (score >= 60) return { grade: 'B', color: '#eab308', bg: 'from-yellow-400 to-amber-600' }
+    if (score >= 50) return { grade: 'C', color: '#f97316', bg: 'from-orange-400 to-red-600' }
+    return { grade: 'D', color: '#ef4444', bg: 'from-red-400 to-red-600' }
+  }
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setIsVisible(true)
+      const duration = 1500
+      const startTime = performance.now()
+
+      const animate = (currentTime: number) => {
+        const elapsed = currentTime - startTime
+        const progress = Math.min(elapsed / duration, 1)
+        const easeOut = 1 - Math.pow(1 - progress, 3)
+        setAnimatedScore(Math.floor(easeOut * score))
+
+        if (progress < 1) {
+          requestAnimationFrame(animate)
+        }
+      }
+
+      requestAnimationFrame(animate)
+    }, delay)
+
+    return () => clearTimeout(timer)
+  }, [score, delay])
+
+  const { grade, color, bg } = getGrade(animatedScore)
+  const center = config.svgSize / 2
+
+  return (
+    <div
+      className={`relative transition-all duration-500 ${isVisible ? 'opacity-100 scale-100' : 'opacity-0 scale-90'}`}
+      style={{ width: config.svgSize, height: config.svgSize }}
+    >
+      {/* Glow effect */}
+      <div
+        className={`absolute inset-4 rounded-full blur-xl opacity-30 bg-gradient-to-br ${bg}`}
       />
-    </svg>
-  )
-}
 
-function TrophyIcon({ className }: { className?: string }) {
-  return (
-    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-      <path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6" />
-      <path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18" />
-      <path d="M4 22h16" />
-      <path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22" />
-      <path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22" />
-      <path d="M18 2H6v7a6 6 0 0 0 12 0V2Z" />
-    </svg>
-  )
-}
-
-function XCircleIcon({ className }: { className?: string }) {
-  return (
-    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-      <circle cx="12" cy="12" r="10" />
-      <line x1="15" y1="9" x2="9" y2="15" />
-      <line x1="9" y1="9" x2="15" y2="15" />
-    </svg>
-  )
-}
-
-function ShareIcon({ className }: { className?: string }) {
-  return (
-    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-      <circle cx="18" cy="5" r="3" />
-      <circle cx="6" cy="12" r="3" />
-      <circle cx="18" cy="19" r="3" />
-      <line x1="8.59" y1="13.51" x2="15.42" y2="17.49" />
-      <line x1="15.41" y1="6.51" x2="8.59" y2="10.49" />
-    </svg>
-  )
-}
-
-function DownloadIcon({ className }: { className?: string }) {
-  return (
-    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-      <polyline points="7 10 12 15 17 10" />
-      <line x1="12" y1="15" x2="12" y2="3" />
-    </svg>
-  )
-}
-
-function RefreshIcon({ className }: { className?: string }) {
-  return (
-    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-      <polyline points="23 4 23 10 17 10" />
-      <polyline points="1 20 1 14 7 14" />
-      <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15" />
-    </svg>
-  )
-}
-
-function CheckIcon({ className }: { className?: string }) {
-  return (
-    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-      <polyline points="20 6 9 17 4 12" />
-    </svg>
-  )
-}
-
-function StarIcon({ className }: { className?: string }) {
-  return (
-    <svg className={className} viewBox="0 0 24 24" fill="currentColor">
-      <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
-    </svg>
-  )
-}
-
-// Score Circle Component
-function ScoreCircle({ score, size = 'large' }: { score: number; size?: 'small' | 'large' }) {
-  const sizeClasses = {
-    small: 'w-20 h-20 text-2xl',
-    large: 'w-40 h-40 text-5xl',
-  }
-
-  const getScoreColor = (score: number) => {
-    if (score >= 80) return 'text-green-500'
-    if (score >= 60) return 'text-amber-500'
-    return 'text-red-500'
-  }
-
-  const circumference = 2 * Math.PI * 45
-  const strokeDashoffset = circumference - (score / 100) * circumference
-
-  return (
-    <div className={`relative ${sizeClasses[size]} flex items-center justify-center`}>
-      <svg className="absolute w-full h-full -rotate-90" viewBox="0 0 100 100">
+      <svg className="transform -rotate-90 relative z-10" width={config.svgSize} height={config.svgSize}>
+        {/* Background circle */}
         <circle
-          cx="50"
-          cy="50"
-          r="45"
+          cx={center}
+          cy={center}
+          r={config.radius}
+          stroke="currentColor"
+          strokeWidth={config.stroke}
           fill="none"
-          stroke="#e5e7eb"
-          strokeWidth="8"
+          className="text-neutral-custom/10"
         />
+        {/* Progress circle */}
         <circle
-          cx="50"
-          cy="50"
-          r="45"
+          cx={center}
+          cy={center}
+          r={config.radius}
+          stroke={color}
+          strokeWidth={config.stroke}
           fill="none"
-          stroke={score >= 80 ? '#22c55e' : score >= 60 ? '#f59e0b' : '#ef4444'}
-          strokeWidth="8"
+          strokeLinecap="round"
           strokeDasharray={circumference}
           strokeDashoffset={strokeDashoffset}
-          strokeLinecap="round"
-          className="transition-all duration-1000"
+          className="transition-all duration-100"
         />
       </svg>
-      <div className={`font-bold ${getScoreColor(score)}`}>{score}</div>
+
+      <div className="absolute inset-0 flex flex-col items-center justify-center z-20">
+        <span className={`font-bold text-neutral-custom ${config.textSize}`}>
+          {animatedScore}
+        </span>
+        <span className={`font-semibold ${config.gradeSize}`} style={{ color }}>
+          {grade}
+        </span>
+      </div>
     </div>
   )
 }
 
-// Term Sheet Card Component
+// Enhanced Category Card component
+function CategoryCard({ category, index }: { category: CategoryScore; index: number }) {
+  const [expanded, setExpanded] = useState(false)
+
+  return (
+    <Card
+      className={`bg-white overflow-hidden transition-all duration-300 animate-in slide-in-from-bottom-4 hover:shadow-lg`}
+      style={{ animationDelay: `${index * 100}ms` }}
+    >
+      {/* Color bar */}
+      <div className="h-1 w-full" style={{ backgroundColor: category.color }} />
+
+      <button
+        onClick={() => setExpanded(!expanded)}
+        className="w-full p-5 text-left"
+      >
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-4">
+            <div
+              className="w-12 h-12 rounded-xl flex items-center justify-center"
+              style={{ backgroundColor: `${category.color}15`, color: category.color }}
+            >
+              {category.icon}
+            </div>
+            <div>
+              <p className="font-semibold text-neutral-custom">{category.name}</p>
+              <p className="text-sm text-neutral-custom-subdued">{category.feedback}</p>
+            </div>
+          </div>
+          <div className="flex items-center gap-4">
+            <AnimatedScoreCircle score={category.score} size="small" delay={index * 200 + 500} />
+            <ChevronRight
+              className={`w-5 h-5 text-neutral-custom-subdued transition-transform duration-200 ${expanded ? 'rotate-90' : ''}`}
+            />
+          </div>
+        </div>
+      </button>
+
+      {/* Expandable content */}
+      <div className={`overflow-hidden transition-all duration-300 ${expanded ? 'max-h-96' : 'max-h-0'}`}>
+        <div className="px-5 pb-5 pt-0 border-t">
+          <div className="grid md:grid-cols-2 gap-6 pt-4">
+            {/* Strengths */}
+            <div className="bg-green-50 rounded-xl p-4">
+              <h4 className="text-sm font-semibold text-green-700 flex items-center gap-2 mb-3">
+                <CheckCircle className="w-4 h-4" /> Strengths
+              </h4>
+              <ul className="space-y-2">
+                {category.strengths.map((s, i) => (
+                  <li key={i} className="text-sm text-green-800 flex items-start gap-2">
+                    <span className="w-1.5 h-1.5 rounded-full bg-green-500 mt-2 flex-shrink-0" />
+                    {s}
+                  </li>
+                ))}
+              </ul>
+            </div>
+
+            {/* Improvements */}
+            <div className="bg-amber-50 rounded-xl p-4">
+              <h4 className="text-sm font-semibold text-amber-700 flex items-center gap-2 mb-3">
+                <AlertCircle className="w-4 h-4" /> Areas to Improve
+              </h4>
+              <ul className="space-y-2">
+                {category.improvements.map((s, i) => (
+                  <li key={i} className="text-sm text-amber-800 flex items-start gap-2">
+                    <span className="w-1.5 h-1.5 rounded-full bg-amber-500 mt-2 flex-shrink-0" />
+                    {s}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          </div>
+        </div>
+      </div>
+    </Card>
+  )
+}
+
+// Enhanced Term Sheet Card component
 function TermSheetCard({ termSheet }: { termSheet: TermSheet }) {
   return (
-    <Card className="bg-gradient-to-br from-green-50 to-emerald-50 border-green-200">
-      <CardHeader>
-        <CardTitle className="text-lg text-green-800 flex items-center gap-2">
-          <TrophyIcon className="w-5 h-5" />
-          Term Sheet Offer
-        </CardTitle>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        <div className="grid grid-cols-2 gap-4">
-          <div className="bg-white/80 p-4 rounded-lg">
-            <div className="text-sm text-green-700">Valuation</div>
-            <div className="text-2xl font-bold text-green-900">{termSheet.valuation}</div>
+    <Card className="overflow-hidden">
+      {/* Gradient header */}
+      <div className="bg-gradient-to-r from-accent-custom via-purple-600 to-accent-custom-baseline p-6 text-white">
+        <div className="flex items-center gap-3 mb-4">
+          <div className="w-12 h-12 rounded-xl bg-white/20 flex items-center justify-center">
+            <DollarSign className="w-6 h-6" />
           </div>
-          <div className="bg-white/80 p-4 rounded-lg">
-            <div className="text-sm text-green-700">Investment</div>
-            <div className="text-2xl font-bold text-green-900">{termSheet.investment_amount}</div>
-          </div>
-          <div className="bg-white/80 p-4 rounded-lg">
-            <div className="text-sm text-green-700">Equity</div>
-            <div className="text-2xl font-bold text-green-900">{termSheet.equity_percentage}</div>
-          </div>
-          <div className="bg-white/80 p-4 rounded-lg">
-            <div className="text-sm text-green-700">Board Seats</div>
-            <div className="text-2xl font-bold text-green-900">{termSheet.board_seats} Seat(s)</div>
+          <div>
+            <h3 className="text-xl font-bold">Term Sheet</h3>
+            <p className="text-white/70 text-sm">Investment offer from the council</p>
           </div>
         </div>
 
-        {termSheet.special_terms && termSheet.special_terms.length > 0 && (
-          <div className="bg-white/80 p-4 rounded-lg">
-            <div className="text-sm text-green-700 mb-2">Special Terms</div>
-            <ul className="space-y-1">
-              {termSheet.special_terms.map((term, index) => (
-                <li key={index} className="flex items-start gap-2 text-sm text-green-900">
-                  <CheckIcon className="w-4 h-4 text-green-600 mt-0.5 flex-shrink-0" />
-                  {term}
-                </li>
-              ))}
-            </ul>
+        <div className="grid grid-cols-2 gap-6">
+          <div className="bg-white/10 rounded-xl p-4">
+            <p className="text-white/70 text-xs mb-1">Total Raised</p>
+            <p className="text-3xl font-bold">{termSheet.totalRaised}</p>
           </div>
-        )}
-      </CardContent>
-    </Card>
-  )
-}
-
-// Feedback List Component
-function FeedbackList({ feedback }: { feedback: FeedbackItem[] }) {
-  const strengths = feedback.filter((f) => f.type === 'strength')
-  const weaknesses = feedback.filter((f) => f.type === 'weakness')
-  const suggestions = feedback.filter((f) => f.type === 'suggestion')
-
-  return (
-    <Card className="bg-white">
-      <CardHeader>
-        <CardTitle className="text-lg">Detailed Feedback</CardTitle>
-      </CardHeader>
-      <CardContent className="space-y-6">
-        {/* Strengths */}
-        {strengths.length > 0 && (
-          <div>
-            <h4 className="text-sm font-medium text-green-700 mb-3 flex items-center gap-2">
-              <CheckIcon className="w-4 h-4" /> Strengths
-            </h4>
-            <ul className="space-y-2">
-              {strengths.map((item, index) => (
-                <li key={index} className="flex items-start gap-2 text-sm">
-                  <span className="text-green-500 mt-1">+</span>
-                  <div>
-                    <span className="text-xs text-neutral-500">[{item.category}]</span>
-                    <p className="text-neutral-700">{item.content}</p>
-                  </div>
-                </li>
-              ))}
-            </ul>
+          <div className="bg-white/10 rounded-xl p-4">
+            <p className="text-white/70 text-xs mb-1">Pre-Money Valuation</p>
+            <p className="text-3xl font-bold">{termSheet.valuation}</p>
           </div>
-        )}
+        </div>
+      </div>
 
-        {/* Weaknesses */}
-        {weaknesses.length > 0 && (
-          <div>
-            <h4 className="text-sm font-medium text-red-700 mb-3 flex items-center gap-2">
-              <XCircleIcon className="w-4 h-4" /> Areas for Improvement
-            </h4>
-            <ul className="space-y-2">
-              {weaknesses.map((item, index) => (
-                <li key={index} className="flex items-start gap-2 text-sm">
-                  <span className="text-red-500 mt-1">-</span>
-                  <div>
-                    <span className="text-xs text-neutral-500">[{item.category}]</span>
-                    <p className="text-neutral-700">{item.content}</p>
-                  </div>
-                </li>
-              ))}
-            </ul>
-          </div>
-        )}
-
-        {/* Suggestions */}
-        {suggestions.length > 0 && (
-          <div>
-            <h4 className="text-sm font-medium text-blue-700 mb-3 flex items-center gap-2">
-              <StarIcon className="w-4 h-4" /> Suggestions
-            </h4>
-            <ul className="space-y-2">
-              {suggestions.map((item, index) => (
-                <li key={index} className="flex items-start gap-2 text-sm">
-                  <span className="text-blue-500 mt-1">*</span>
-                  <div>
-                    <span className="text-xs text-neutral-500">[{item.category}]</span>
-                    <p className="text-neutral-700">{item.content}</p>
-                  </div>
-                </li>
-              ))}
-            </ul>
-          </div>
-        )}
-      </CardContent>
-    </Card>
-  )
-}
-
-// Category Breakdown Component
-function CategoryBreakdown({ categories }: { categories: CategoryScore[] }) {
-  return (
-    <Card className="bg-white">
-      <CardHeader>
-        <CardTitle className="text-lg">Category Scores</CardTitle>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        {categories.map((category, index) => (
-          <div key={index}>
-            <div className="flex items-center justify-between mb-1">
-              <span className="text-sm font-medium text-neutral-custom">{category.name}</span>
-              <span className={`text-sm font-bold ${
-                category.score >= 80 ? 'text-green-600' :
-                category.score >= 60 ? 'text-amber-600' : 'text-red-600'
-              }`}>
-                {category.score}/100
-              </span>
+      <CardContent className="p-6">
+        <div className="mb-6">
+          <p className="text-xs text-neutral-custom-subdued mb-1">Lead Investor</p>
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-full bg-gradient-to-br from-amber-400 to-orange-600 flex items-center justify-center text-lg">
+              👨‍🚀
             </div>
-            <div className="h-2 bg-neutral-200 rounded-full overflow-hidden">
+            <div>
+              <p className="font-semibold text-neutral-custom">{termSheet.leadInvestor}</p>
+              <p className="text-xs text-neutral-custom-subdued">Founder Fund</p>
+            </div>
+          </div>
+        </div>
+
+        <div>
+          <p className="text-xs text-neutral-custom-subdued mb-3">Key Terms</p>
+          <div className="grid grid-cols-2 gap-2">
+            {termSheet.terms.map((term, i) => (
               <div
-                className={`h-full rounded-full transition-all duration-500 ${
-                  category.score >= 80 ? 'bg-green-500' :
-                  category.score >= 60 ? 'bg-amber-500' : 'bg-red-500'
-                }`}
-                style={{ width: `${category.score}%` }}
-              />
-            </div>
-            <p className="text-xs text-neutral-custom-subdued mt-1">{category.feedback}</p>
+                key={i}
+                className="flex items-center gap-2 bg-neutral-custom/5 rounded-lg px-3 py-2"
+              >
+                <Star className="w-3 h-3 text-accent-custom flex-shrink-0" />
+                <span className="text-sm text-neutral-custom">{term}</span>
+              </div>
+            ))}
           </div>
-        ))}
+        </div>
       </CardContent>
     </Card>
   )
 }
 
-// Main Component
-export default function VerdictPage() {
-  const params = useParams()
-  const router = useRouter()
-  const sessionId = params.id as string
-  const { investorMode, addToHistory, deckName } = useSessionStore()
+// Investor Votes component
+function InvestorVotes({ votes }: { votes: InvestorVote[] }) {
+  const invested = votes.filter(v => v.decision === 'invest').length
+  const passed = votes.filter(v => v.decision === 'pass').length
+  const investedPercent = (invested / votes.length) * 100
 
-  const [sessionData, setSessionData] = useState<SessionData | null>(null)
-  const [verdictData, setVerdictData] = useState<VerdictData | null>(null)
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
+  return (
+    <Card className="bg-white overflow-hidden">
+      <div className="p-6">
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center gap-2">
+            <Users className="w-5 h-5 text-accent-custom" />
+            <h3 className="font-semibold text-neutral-custom">Council Votes</h3>
+          </div>
+          <span className="text-sm text-neutral-custom-subdued">{votes.length} investors</span>
+        </div>
 
-  // Fetch session and generate verdict
-  useEffect(() => {
-    async function fetchData() {
-      try {
-        const response = await apiCall<SessionData>(`/api/session/${sessionId}`)
-        if (response.success && response.data) {
-          setSessionData(response.data)
+        {/* Progress bar */}
+        <div className="relative h-3 bg-neutral-custom/10 rounded-full overflow-hidden mb-4">
+          <div
+            className="absolute inset-y-0 left-0 bg-gradient-to-r from-green-400 to-green-600 rounded-full transition-all duration-1000"
+            style={{ width: `${investedPercent}%` }}
+          />
+          <div className="absolute inset-0 flex">
+            <div className="flex-1 flex items-center justify-center">
+              <span className="text-[10px] font-semibold text-white drop-shadow-sm">{invested}</span>
+            </div>
+            <div className="flex-1 flex items-center justify-center">
+              <span className="text-[10px] font-semibold text-neutral-custom">{passed}</span>
+            </div>
+          </div>
+        </div>
 
-          // Generate mock verdict based on session data
-          const overallScore = response.data.deck_analysis?.scores?.overall_score || 75
-          const isInvest = overallScore >= 65
+        {/* Stats */}
+        <div className="grid grid-cols-2 gap-4 mb-4">
+          <div className="flex items-center gap-2 bg-green-50 rounded-xl p-3">
+            <ThumbsUp className="w-5 h-5 text-green-600" />
+            <div>
+              <p className="text-lg font-bold text-green-600">{invested}</p>
+              <p className="text-xs text-green-700">Would Invest</p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2 bg-red-50 rounded-xl p-3">
+            <ThumbsDown className="w-5 h-5 text-red-600" />
+            <div>
+              <p className="text-lg font-bold text-red-600">{passed}</p>
+              <p className="text-xs text-red-700">Would Pass</p>
+            </div>
+          </div>
+        </div>
 
-          const mockVerdict: VerdictData = {
-            session_id: sessionId,
-            decision: isInvest ? 'invest' : 'pass',
-            final_score: overallScore,
-            confidence: isInvest ? 78 : 65,
-            investor_votes: {
-              invest: isInvest ? 4 : 1,
-              pass: isInvest ? 1 : 4,
-            },
-            term_sheet: isInvest ? {
-              valuation: '$5M Pre-money',
-              investment_amount: '$500K',
-              equity_percentage: '10%',
-              board_seats: 1,
-              special_terms: [
-                'Pro-rata rights',
-                'Information rights',
-                '4-year vesting with 12-month cliff',
-              ],
-            } : undefined,
-            category_scores: [
-              { name: 'Problem', score: Math.min(100, overallScore + Math.floor(Math.random() * 20) - 10), feedback: 'Problem definition is clear and compelling.' },
-              { name: 'Solution', score: Math.min(100, overallScore + Math.floor(Math.random() * 20) - 10), feedback: 'Solution approach is innovative.' },
-              { name: 'Market', score: Math.min(100, overallScore + Math.floor(Math.random() * 20) - 10), feedback: 'Market size is large and growing.' },
-              { name: 'Traction', score: Math.min(100, overallScore + Math.floor(Math.random() * 20) - 10), feedback: 'Acceptable metrics for early stage.' },
-              { name: 'Team', score: Math.min(100, overallScore + Math.floor(Math.random() * 20) - 10), feedback: 'Experienced and complementary team.' },
-              { name: 'Financials', score: Math.min(100, overallScore + Math.floor(Math.random() * 20) - 10), feedback: 'Financial projections are reasonable.' },
-              { name: 'Ask', score: Math.min(100, overallScore + Math.floor(Math.random() * 20) - 10), feedback: 'Investment ask aligns with market standards.' },
-            ],
-            feedback: [
-              { category: 'Problem', type: 'strength', content: 'Clearly identified the pain point of the target audience.' },
-              { category: 'Solution', type: 'strength', content: 'Solid technical foundation with scalable architecture.' },
-              { category: 'Market', type: 'strength', content: 'TAM calculation is realistic and well-researched.' },
-              { category: 'Traction', type: 'weakness', content: 'Could share more user metrics and engagement data.' },
-              { category: 'Team', type: 'weakness', content: 'Could benefit from someone with sales/marketing experience.' },
-              { category: 'Financials', type: 'suggestion', content: 'Consider detailing CAC/LTV calculations.' },
-              { category: 'Ask', type: 'suggestion', content: 'A milestone-based investment model could be considered.' },
-            ],
-            investor_pool_eligible: isInvest && overallScore >= 75,
-          }
+        {/* Individual votes */}
+        <div className="space-y-2">
+          {votes.map((vote, i) => (
+            <div
+              key={i}
+              className={`flex items-center justify-between p-3 rounded-xl ${
+                vote.decision === 'invest' ? 'bg-green-50' : 'bg-red-50'
+              }`}
+            >
+              <div className="flex items-center gap-3">
+                <div
+                  className="w-8 h-8 rounded-lg flex items-center justify-center text-sm"
+                  style={{ backgroundColor: `${vote.color}20` }}
+                >
+                  {vote.avatar}
+                </div>
+                <div>
+                  <p className="text-sm font-medium text-neutral-custom">{vote.name}</p>
+                  <p className="text-xs text-neutral-custom-subdued">{vote.firm}</p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                {vote.amount && (
+                  <span className="text-xs font-semibold bg-green-200 text-green-800 px-2 py-0.5 rounded-full">
+                    {vote.amount}
+                  </span>
+                )}
+                {vote.decision === 'invest' ? (
+                  <ThumbsUp className="w-4 h-4 text-green-600" />
+                ) : (
+                  <ThumbsDown className="w-4 h-4 text-red-600" />
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </Card>
+  )
+}
 
-          setVerdictData(mockVerdict)
-
-          // Save to history
-          addToHistory({
-            id: sessionId,
-            date: new Date().toISOString(),
-            investorMode: (investorMode || response.data.investor_mode || 'friendly') as 'shark' | 'friendly' | 'analyst',
-            score: overallScore,
-            decision: isInvest ? 'invest' : 'pass',
-            deckName: deckName || undefined,
-          })
-        } else {
-          setError(response.error?.message || 'Session not found')
-        }
-      } catch (err) {
-        setError('Connection error')
-      } finally {
-        setLoading(false)
-      }
-    }
-
-    if (sessionId) {
-      fetchData()
-    }
-  }, [sessionId, addToHistory, investorMode, deckName])
-
-  const handleTryAgain = () => {
-    router.push('/upload')
-  }
+// Share button with copy functionality
+function ShareButton() {
+  const [copied, setCopied] = useState(false)
 
   const handleShare = async () => {
-    try {
+    if (navigator.share) {
       await navigator.share({
-        title: 'PitchDrill Result',
-        text: `Pitch score: ${verdictData?.final_score}/100 - ${verdictData?.decision === 'invest' ? 'INVESTMENT' : 'PASS'}`,
+        title: 'My PitchDrill Results',
+        text: 'Check out my pitch practice results!',
         url: window.location.href,
       })
-    } catch (err) {
-      // Fallback: copy to clipboard
-      await navigator.clipboard.writeText(window.location.href)
-      alert('Link copied!')
+    } else {
+      navigator.clipboard.writeText(window.location.href)
+      setCopied(true)
+      setTimeout(() => setCopied(false), 2000)
     }
   }
 
-  const handleExport = () => {
-    // Create export data
-    const exportData = {
-      session_id: sessionId,
-      date: new Date().toISOString(),
-      verdict: verdictData,
-    }
+  return (
+    <Button variant="outline" size="sm" onClick={handleShare} className="relative">
+      {copied ? (
+        <>
+          <Check className="w-4 h-4 mr-2 text-green-600" />
+          Copied!
+        </>
+      ) : (
+        <>
+          <Share2 className="w-4 h-4 mr-2" />
+          Share
+        </>
+      )}
+    </Button>
+  )
+}
 
-    const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = `pitchdrill-verdict-${sessionId?.slice(0, 8)}.json`
-    a.click()
-    URL.revokeObjectURL(url)
-  }
+export default function VerdictPage() {
+  const params = useParams()
+  const sessionId = params.id as string
+  const [loading, setLoading] = useState(true)
+  const [showConfetti, setShowConfetti] = useState(false)
+
+  // Mock data - would come from API
+  const [verdictData] = useState({
+    overallScore: 78,
+    categories: [
+      {
+        name: 'Problem Statement',
+        score: 85,
+        icon: <Target className="w-5 h-5" />,
+        feedback: 'Clear and compelling problem definition',
+        strengths: ['Well-defined target market', 'Strong pain point articulation', 'Good use of data and statistics'],
+        improvements: ['Could quantify the problem impact more', 'Add more customer quotes and testimonials'],
+        color: '#8B5CF6',
+      },
+      {
+        name: 'Solution',
+        score: 75,
+        icon: <Lightbulb className="w-5 h-5" />,
+        feedback: 'Solid solution with room for differentiation',
+        strengths: ['Innovative approach to the problem', 'Clear value proposition'],
+        improvements: ['Explain technical moat better', 'Show demo or working prototype'],
+        color: '#3B82F6',
+      },
+      {
+        name: 'Market Size',
+        score: 70,
+        icon: <TrendingUp className="w-5 h-5" />,
+        feedback: 'TAM/SAM/SOM could be more specific',
+        strengths: ['Large addressable market identified', 'Growing industry with tailwinds'],
+        improvements: ['Bottom-up TAM calculation needed', 'More specific SOM focus and timeline'],
+        color: '#10B981',
+      },
+      {
+        name: 'Team',
+        score: 82,
+        icon: <Users className="w-5 h-5" />,
+        feedback: 'Strong founding team with relevant experience',
+        strengths: ['Domain expertise evident', 'Complementary skill sets', 'Previous successful exits'],
+        improvements: ['Show advisory board members', 'Highlight key hires planned'],
+        color: '#F59E0B',
+      },
+    ] as CategoryScore[],
+    termSheet: {
+      totalRaised: '$1.95M',
+      leadInvestor: 'David Park',
+      valuation: '$8M',
+      terms: ['20% equity', 'Board seat', '1x liquidation pref', 'Pro-rata rights'],
+    },
+    votes: [
+      { name: 'Sarah Chen', firm: 'Velocity Ventures', avatar: '👩‍💼', decision: 'invest' as const, amount: '$500K', color: '#8B5CF6' },
+      { name: 'Marcus Johnson', firm: 'Binary Capital', avatar: '👨‍💻', decision: 'invest' as const, amount: '$300K', color: '#3B82F6' },
+      { name: 'Elena Rodriguez', firm: 'Global Seed Fund', avatar: '👩‍🔬', decision: 'pass' as const, color: '#10B981' },
+      { name: 'David Park', firm: 'Founder Fund', avatar: '👨‍🚀', decision: 'invest' as const, amount: '$750K', color: '#F59E0B' },
+      { name: 'Amanda Foster', firm: 'Purpose Capital', avatar: '👩‍🌾', decision: 'invest' as const, amount: '$400K', color: '#EC4899' },
+    ],
+  })
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setLoading(false)
+      if (verdictData.overallScore >= 70) {
+        setShowConfetti(true)
+      }
+    }, 1500)
+    return () => clearTimeout(timer)
+  }, [verdictData.overallScore])
 
   if (loading) {
     return (
-      <main className="min-h-screen bg-canvas flex items-center justify-center">
+      <div className="min-h-screen bg-canvas flex items-center justify-center">
         <div className="text-center">
-          <Spinner className="w-12 h-12 text-accent-custom mx-auto mb-4" />
-          <p className="text-neutral-custom-subdued">Preparing results...</p>
+          <div className="relative mb-6">
+            <div className="w-24 h-24 rounded-full bg-accent-custom/10 flex items-center justify-center mx-auto">
+              <Trophy className="w-12 h-12 text-accent-custom" />
+            </div>
+            <div className="absolute inset-0 rounded-full border-4 border-accent-custom/30 border-t-accent-custom animate-spin" />
+          </div>
+          <p className="text-neutral-custom font-medium mb-2">Calculating Your Results</p>
+          <p className="text-sm text-neutral-custom-subdued">Analyzing council feedback...</p>
         </div>
-      </main>
+      </div>
     )
   }
 
-  if (error || !verdictData) {
-    return (
-      <main className="min-h-screen bg-canvas flex items-center justify-center p-8">
-        <Card className="max-w-md w-full">
-          <CardContent className="p-6 text-center">
-            <p className="text-red-600 mb-4">{error || 'Result not found'}</p>
-            <Link href="/upload">
-              <Button variant="outline">Go Back</Button>
-            </Link>
-          </CardContent>
-        </Card>
-      </main>
-    )
+  const getScoreMessage = (score: number) => {
+    if (score >= 90) return { title: 'Outstanding Pitch!', subtitle: 'You nailed it! Investors are excited.' }
+    if (score >= 80) return { title: 'Excellent Pitch!', subtitle: 'Strong performance with minor improvements possible.' }
+    if (score >= 70) return { title: 'Good Foundation!', subtitle: 'Solid pitch with room for growth.' }
+    if (score >= 60) return { title: 'Promising Start!', subtitle: 'Good potential, needs some refinement.' }
+    return { title: 'Needs Work', subtitle: 'Focus on the improvement areas below.' }
   }
 
-  const isInvest = verdictData.decision === 'invest'
+  const scoreMessage = getScoreMessage(verdictData.overallScore)
 
   return (
-    <main className="min-h-screen bg-canvas">
-      {/* Header */}
-      <header className="bg-white border-b border-neutral-200 px-4 py-3">
-        <div className="max-w-7xl mx-auto flex items-center justify-between">
-          <div className="flex items-center gap-4">
-            <Link
-              href={`/council/${sessionId}`}
-              className="text-neutral-custom-subdued hover:text-neutral-custom text-sm"
-            >
-              &larr; Back to Council
-            </Link>
-            <div className="h-6 w-px bg-neutral-200" />
-            <span className="text-lg font-bold text-neutral-custom">Result</span>
-          </div>
+    <div className="min-h-screen bg-canvas">
+      <VerdictNav />
 
-          <div className="flex items-center gap-2">
-            <Button variant="outline" size="sm" onClick={handleShare}>
-              <ShareIcon className="w-4 h-4 mr-2" />
-              Share
-            </Button>
-            <Button variant="outline" size="sm" onClick={handleExport}>
-              <DownloadIcon className="w-4 h-4 mr-2" />
-              Download
-            </Button>
-          </div>
-        </div>
-      </header>
+      <main className="max-w-5xl mx-auto px-6 py-8">
+        {/* Hero Section */}
+        <Card className="bg-white overflow-hidden mb-8">
+          <div className="relative">
+            {/* Background decoration */}
+            <div className="absolute top-0 right-0 w-64 h-64 bg-gradient-to-bl from-accent-custom/10 to-transparent rounded-full -translate-y-1/2 translate-x-1/2" />
+            <div className="absolute bottom-0 left-0 w-48 h-48 bg-gradient-to-tr from-green-500/10 to-transparent rounded-full translate-y-1/2 -translate-x-1/2" />
 
-      {/* Decision Banner */}
-      <div className={`py-12 ${isInvest ? 'bg-gradient-to-b from-green-500 to-green-600' : 'bg-gradient-to-b from-red-500 to-red-600'}`}>
-        <div className="max-w-4xl mx-auto text-center text-white">
-          <div className="mb-6">
-            {isInvest ? (
-              <TrophyIcon className="w-20 h-20 mx-auto" />
-            ) : (
-              <XCircleIcon className="w-20 h-20 mx-auto" />
-            )}
-          </div>
-          <h1 className="text-4xl font-bold mb-2">
-            {isInvest ? 'INVESTMENT DECISION' : 'PASS'}
-          </h1>
-          <p className="text-xl opacity-90 mb-6">
-            {isInvest
-              ? 'Congratulations! The VC Council has decided to invest in your project.'
-              : 'Unfortunately, you did not receive investment this round. Review the feedback.'}
-          </p>
-
-          <div className="flex items-center justify-center gap-8">
-            <div>
-              <ScoreCircle score={verdictData.final_score} size="large" />
-              <p className="mt-2 text-sm opacity-75">Final Score</p>
-            </div>
-            <div className="text-left">
-              <div className="flex items-center gap-2 mb-2">
-                <span className="text-green-200">Invest:</span>
-                <span className="font-bold text-2xl">{verdictData.investor_votes.invest}</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <span className="text-red-200">Pass:</span>
-                <span className="font-bold text-2xl">{verdictData.investor_votes.pass}</span>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Investor Pool Banner */}
-      {verdictData.investor_pool_eligible && (
-        <div className="bg-gradient-to-r from-purple-600 to-indigo-600 py-4">
-          <div className="max-w-4xl mx-auto text-center text-white px-4">
-            <div className="flex items-center justify-center gap-2">
-              <StarIcon className="w-5 h-5" />
-              <span className="font-medium">You've been added to the Investor Pool!</span>
-            </div>
-            <p className="text-sm opacity-90 mt-1">
-              Your score is high enough. You have a chance to be matched with real investors.
-            </p>
-          </div>
-        </div>
-      )}
-
-      {/* Main Content */}
-      <div className="max-w-7xl mx-auto p-4">
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {/* Left Column */}
-          <div className="space-y-6">
-            {/* Term Sheet */}
-            {verdictData.term_sheet && (
-              <TermSheetCard termSheet={verdictData.term_sheet} />
-            )}
-
-            {/* Category Breakdown */}
-            <CategoryBreakdown categories={verdictData.category_scores} />
-          </div>
-
-          {/* Right Column */}
-          <div className="space-y-6">
-            {/* Feedback */}
-            <FeedbackList feedback={verdictData.feedback} />
-
-            {/* Actions */}
-            <Card className="bg-white">
-              <CardContent className="p-6">
-                <h3 className="text-lg font-medium text-neutral-custom mb-4">Next Steps</h3>
-                <div className="space-y-3">
-                  <Button
-                    onClick={handleTryAgain}
-                    className="w-full bg-accent-custom hover:bg-accent-custom/90"
-                  >
-                    <RefreshIcon className="w-4 h-4 mr-2" />
-                    Try New Pitch
-                  </Button>
-                  <Button
-                    variant="outline"
-                    className="w-full"
-                    onClick={() => router.push('/upload')}
-                  >
-                    Upload Different Deck
-                  </Button>
-                  {verdictData.investor_pool_eligible && (
-                    <Button
-                      className="w-full bg-purple-500 hover:bg-purple-600"
-                      onClick={() => alert('Investor Pool feature coming soon!')}
-                    >
-                      <StarIcon className="w-4 h-4 mr-2" />
-                      Apply to Investor Pool
-                    </Button>
+            <div className="relative p-8">
+              <div className="flex flex-col lg:flex-row items-center gap-8">
+                {/* Score circle */}
+                <div className="relative">
+                  {showConfetti && (
+                    <div className="absolute -inset-4">
+                      <Sparkles className="w-6 h-6 text-yellow-400 absolute top-0 left-0 animate-pulse" />
+                      <Sparkles className="w-5 h-5 text-accent-custom absolute top-0 right-0 animate-pulse" style={{ animationDelay: '0.2s' }} />
+                      <Sparkles className="w-4 h-4 text-green-400 absolute bottom-0 left-0 animate-pulse" style={{ animationDelay: '0.4s' }} />
+                      <Sparkles className="w-6 h-6 text-pink-400 absolute bottom-0 right-0 animate-pulse" style={{ animationDelay: '0.6s' }} />
+                    </div>
                   )}
+                  <AnimatedScoreCircle score={verdictData.overallScore} size="large" />
                 </div>
-              </CardContent>
-            </Card>
 
-            {/* Session Info */}
-            <Card className="bg-neutral-50">
-              <CardContent className="p-4 text-sm text-neutral-custom-subdued">
-                <div className="flex justify-between mb-2">
-                  <span>Session ID:</span>
-                  <span className="font-mono text-xs">{sessionId}</span>
+                {/* Message */}
+                <div className="text-center lg:text-left flex-1">
+                  <div className="flex items-center gap-2 justify-center lg:justify-start mb-2">
+                    <Award className="w-6 h-6 text-accent-custom" />
+                    <span className="text-sm font-medium text-accent-custom">Final Verdict</span>
+                  </div>
+                  <h1 className="text-3xl font-bold text-neutral-custom mb-2">
+                    {scoreMessage.title}
+                  </h1>
+                  <p className="text-neutral-custom-subdued mb-6 max-w-md">
+                    {scoreMessage.subtitle}
+                  </p>
+
+                  {/* Action buttons */}
+                  <div className="flex flex-wrap gap-3 justify-center lg:justify-start">
+                    <ShareButton />
+                    <Button variant="outline" size="sm">
+                      <Download className="w-4 h-4 mr-2" />
+                      Export PDF
+                    </Button>
+                    <Link href={`/session/${sessionId}?mode=solo`}>
+                      <Button size="sm" className="bg-accent-custom hover:bg-accent-custom-baseline text-white">
+                        <RefreshCw className="w-4 h-4 mr-2" />
+                        Practice Again
+                      </Button>
+                    </Link>
+                  </div>
                 </div>
-                <div className="flex justify-between mb-2">
-                  <span>Date:</span>
-                  <span>{new Date().toLocaleDateString('en-US')}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span>Mode:</span>
-                  <span className="capitalize">{investorMode || sessionData?.investor_mode || 'Friendly'}</span>
-                </div>
-              </CardContent>
-            </Card>
+              </div>
+            </div>
+          </div>
+        </Card>
+
+        <div className="grid lg:grid-cols-3 gap-6 mb-8">
+          {/* Term Sheet */}
+          <div className="lg:col-span-2">
+            <TermSheetCard termSheet={verdictData.termSheet} />
+          </div>
+
+          {/* Investor Votes */}
+          <div>
+            <InvestorVotes votes={verdictData.votes} />
           </div>
         </div>
-      </div>
-    </main>
+
+        {/* Category Breakdown */}
+        <div className="mb-8">
+          <div className="flex items-center gap-2 mb-4">
+            <BarChart3 className="w-5 h-5 text-accent-custom" />
+            <h2 className="text-xl font-bold text-neutral-custom">Category Breakdown</h2>
+          </div>
+          <div className="space-y-4">
+            {verdictData.categories.map((category, index) => (
+              <CategoryCard key={category.name} category={category} index={index} />
+            ))}
+          </div>
+        </div>
+
+        {/* Next Steps */}
+        <Card className="bg-gradient-to-r from-accent-custom to-accent-custom-baseline text-white p-6 mb-8">
+          <div className="flex flex-col md:flex-row items-center gap-6">
+            <div className="w-16 h-16 rounded-2xl bg-white/20 flex items-center justify-center flex-shrink-0">
+              <Lightbulb className="w-8 h-8" />
+            </div>
+            <div className="flex-1 text-center md:text-left">
+              <h3 className="text-xl font-bold mb-2">Ready to Improve?</h3>
+              <p className="text-white/80 mb-4">
+                Focus on the improvement areas above and try another practice session.
+                Each practice helps you refine your pitch.
+              </p>
+            </div>
+            <div className="flex gap-3">
+              <Link href="/upload">
+                <Button variant="outline" className="bg-white/10 border-white/20 text-white hover:bg-white/20">
+                  <FileText className="w-4 h-4 mr-2" />
+                  New Deck
+                </Button>
+              </Link>
+              <Link href="/dashboard">
+                <Button className="bg-white text-accent-custom hover:bg-white/90">
+                  Dashboard
+                  <ArrowRight className="w-4 h-4 ml-2" />
+                </Button>
+              </Link>
+            </div>
+          </div>
+        </Card>
+
+        {/* Session info */}
+        <div className="text-center text-sm text-neutral-custom-subdued">
+          <div className="flex items-center justify-center gap-2">
+            <Clock className="w-4 h-4" />
+            Session completed on {new Date().toLocaleDateString('tr-TR', {
+              day: 'numeric',
+              month: 'long',
+              year: 'numeric',
+              hour: '2-digit',
+              minute: '2-digit'
+            })}
+          </div>
+        </div>
+      </main>
+    </div>
   )
 }

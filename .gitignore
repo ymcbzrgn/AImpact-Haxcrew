@@ -55,6 +55,9 @@ htmlcov/
 *.pem
 .vercel
 
+# Data files
+apps/api/data/
+
 # Ignore vscode AI rules
 .github/instructions/codacy.instructions.md
 CLAUDE.md

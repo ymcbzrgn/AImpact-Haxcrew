@@ -1,274 +1,233 @@
 'use client'
 
-import { useEffect, useRef, useState, useCallback } from 'react'
+import { useEffect, useRef, useCallback, useState } from 'react'
+import { useSessionStore } from '@/stores/session'
 
-type WebSocketStatus = 'connecting' | 'connected' | 'disconnected' | 'error'
+const WS_URL = process.env.NEXT_PUBLIC_WS_URL || 'ws://localhost:8000'
 
-interface WebSocketMessage {
-  type: string
-  payload: unknown
-  timestamp: number
+export type WebSocketEvent =
+  | 'connected'
+  | 'disconnected'
+  | 'audio_chunk'
+  | 'transcript'
+  | 'realtime_note'
+  | 'ai_response'
+  | 'council_message'
+  | 'council_vote'
+  | 'council_complete'
+  | 'error'
+
+export interface WebSocketMessage {
+  type: WebSocketEvent
+  data?: any
+  error?: string
 }
 
 interface UseWebSocketOptions {
-  url: string
+  sessionId: string
+  autoConnect?: boolean
+  reconnectAttempts?: number
+  reconnectInterval?: number
   onMessage?: (message: WebSocketMessage) => void
   onConnect?: () => void
   onDisconnect?: () => void
   onError?: (error: Event) => void
-  reconnect?: boolean
-  reconnectInterval?: number
-  reconnectAttempts?: number
-  heartbeatInterval?: number
 }
 
 interface UseWebSocketReturn {
-  status: WebSocketStatus
-  send: (type: string, payload: unknown) => void
+  isConnected: boolean
+  isReconnecting: boolean
+  reconnectCount: number
   connect: () => void
   disconnect: () => void
-  lastMessage: WebSocketMessage | null
-  isConnected: boolean
+  sendMessage: (type: string, data?: any) => void
+  sendAudioChunk: (audioData: ArrayBuffer) => void
+  startPitch: () => void
+  endPitch: () => void
+  startQA: () => void
+  answerComplete: (answer: string) => void
+  startCouncil: () => void
 }
 
 export function useWebSocket({
-  url,
+  sessionId,
+  autoConnect = true,
+  reconnectAttempts = 5,
+  reconnectInterval = 3000,
   onMessage,
   onConnect,
   onDisconnect,
   onError,
-  reconnect = true,
-  reconnectInterval = 3000,
-  reconnectAttempts = 5,
-  heartbeatInterval = 30000,
 }: UseWebSocketOptions): UseWebSocketReturn {
   const wsRef = useRef<WebSocket | null>(null)
-  const reconnectCountRef = useRef(0)
   const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null)
-  const heartbeatIntervalRef = useRef<NodeJS.Timeout | null>(null)
+  const [isConnected, setIsConnected] = useState(false)
+  const [isReconnecting, setIsReconnecting] = useState(false)
+  const [reconnectCount, setReconnectCount] = useState(0)
 
-  const [status, setStatus] = useState<WebSocketStatus>('disconnected')
-  const [lastMessage, setLastMessage] = useState<WebSocketMessage | null>(null)
+  const { setStatus } = useSessionStore()
 
-  const clearHeartbeat = useCallback(() => {
-    if (heartbeatIntervalRef.current) {
-      clearInterval(heartbeatIntervalRef.current)
-      heartbeatIntervalRef.current = null
+  const clearReconnectTimeout = useCallback(() => {
+    if (reconnectTimeoutRef.current) {
+      clearTimeout(reconnectTimeoutRef.current)
+      reconnectTimeoutRef.current = null
     }
   }, [])
-
-  const startHeartbeat = useCallback(() => {
-    clearHeartbeat()
-    heartbeatIntervalRef.current = setInterval(() => {
-      if (wsRef.current?.readyState === WebSocket.OPEN) {
-        wsRef.current.send(JSON.stringify({ type: 'ping', timestamp: Date.now() }))
-      }
-    }, heartbeatInterval)
-  }, [clearHeartbeat, heartbeatInterval])
 
   const connect = useCallback(() => {
     if (wsRef.current?.readyState === WebSocket.OPEN) {
       return
     }
 
-    setStatus('connecting')
-
     try {
-      wsRef.current = new WebSocket(url)
+      const ws = new WebSocket(`${WS_URL}/ws/${sessionId}`)
 
-      wsRef.current.onopen = () => {
-        setStatus('connected')
-        reconnectCountRef.current = 0
-        startHeartbeat()
+      ws.onopen = () => {
+        console.log('[WS] Connected to session:', sessionId)
+        setIsConnected(true)
+        setIsReconnecting(false)
+        setReconnectCount(0)
+        clearReconnectTimeout()
         onConnect?.()
       }
 
-      wsRef.current.onclose = () => {
-        setStatus('disconnected')
-        clearHeartbeat()
+      ws.onclose = (event) => {
+        console.log('[WS] Disconnected:', event.code, event.reason)
+        setIsConnected(false)
         onDisconnect?.()
 
-        // Attempt reconnection
-        if (reconnect && reconnectCountRef.current < reconnectAttempts) {
-          reconnectCountRef.current++
+        // Attempt reconnection if not a clean close
+        if (event.code !== 1000 && reconnectCount < reconnectAttempts) {
+          setIsReconnecting(true)
           reconnectTimeoutRef.current = setTimeout(() => {
+            console.log(`[WS] Reconnection attempt ${reconnectCount + 1}/${reconnectAttempts}`)
+            setReconnectCount((prev) => prev + 1)
             connect()
           }, reconnectInterval)
         }
       }
 
-      wsRef.current.onerror = (error) => {
-        setStatus('error')
+      ws.onerror = (error) => {
+        console.error('[WS] Error:', error)
         onError?.(error)
       }
 
-      wsRef.current.onmessage = (event) => {
+      ws.onmessage = (event) => {
         try {
           const message: WebSocketMessage = JSON.parse(event.data)
-          setLastMessage(message)
+          console.log('[WS] Message received:', message.type)
+
+          // Handle specific message types
+          switch (message.type) {
+            case 'realtime_note':
+              // Real-time feedback/notes during pitch
+              break
+            case 'transcript':
+              // Speech-to-text transcript
+              break
+            case 'ai_response':
+              // AI investor response
+              break
+            case 'council_message':
+              // VC council member speaking
+              break
+            case 'council_vote':
+              // Council voting
+              break
+            case 'council_complete':
+              // Council session complete
+              setStatus('completed')
+              break
+            case 'error':
+              console.error('[WS] Server error:', message.error)
+              break
+          }
+
           onMessage?.(message)
         } catch (e) {
-          console.error('Failed to parse WebSocket message:', e)
+          console.error('[WS] Failed to parse message:', e)
         }
       }
+
+      wsRef.current = ws
     } catch (error) {
-      setStatus('error')
-      console.error('WebSocket connection error:', error)
+      console.error('[WS] Connection error:', error)
     }
-  }, [
-    url,
-    onConnect,
-    onDisconnect,
-    onError,
-    onMessage,
-    reconnect,
-    reconnectAttempts,
-    reconnectInterval,
-    startHeartbeat,
-    clearHeartbeat,
-  ])
+  }, [sessionId, reconnectCount, reconnectAttempts, reconnectInterval, onConnect, onDisconnect, onError, onMessage, setStatus, clearReconnectTimeout])
 
   const disconnect = useCallback(() => {
-    if (reconnectTimeoutRef.current) {
-      clearTimeout(reconnectTimeoutRef.current)
-      reconnectTimeoutRef.current = null
-    }
-    clearHeartbeat()
-    reconnectCountRef.current = reconnectAttempts // Prevent reconnection
-
+    clearReconnectTimeout()
+    setReconnectCount(reconnectAttempts) // Prevent reconnection
     if (wsRef.current) {
-      wsRef.current.close()
+      wsRef.current.close(1000, 'Client disconnect')
       wsRef.current = null
     }
-    setStatus('disconnected')
-  }, [clearHeartbeat, reconnectAttempts])
+    setIsConnected(false)
+    setIsReconnecting(false)
+  }, [clearReconnectTimeout, reconnectAttempts])
 
-  const send = useCallback((type: string, payload: unknown) => {
+  const sendMessage = useCallback((type: string, data?: any) => {
     if (wsRef.current?.readyState === WebSocket.OPEN) {
-      const message: WebSocketMessage = {
-        type,
-        payload,
-        timestamp: Date.now(),
-      }
-      wsRef.current.send(JSON.stringify(message))
+      wsRef.current.send(JSON.stringify({ type, data }))
     } else {
-      console.warn('WebSocket is not connected')
+      console.warn('[WS] Cannot send message, not connected')
     }
   }, [])
 
-  // Cleanup on unmount
+  const sendAudioChunk = useCallback((audioData: ArrayBuffer) => {
+    if (wsRef.current?.readyState === WebSocket.OPEN) {
+      // Send as binary data
+      wsRef.current.send(audioData)
+    }
+  }, [])
+
+  const startPitch = useCallback(() => {
+    sendMessage('start_pitch')
+    setStatus('pitching')
+  }, [sendMessage, setStatus])
+
+  const endPitch = useCallback(() => {
+    sendMessage('end_pitch')
+    setStatus('qa')
+  }, [sendMessage, setStatus])
+
+  const startQA = useCallback(() => {
+    sendMessage('start_qa')
+    setStatus('qa')
+  }, [sendMessage, setStatus])
+
+  const answerComplete = useCallback((answer: string) => {
+    sendMessage('answer_complete', { answer })
+  }, [sendMessage])
+
+  const startCouncil = useCallback(() => {
+    sendMessage('start_council')
+    setStatus('council')
+  }, [sendMessage, setStatus])
+
+  // Auto-connect on mount
   useEffect(() => {
+    if (autoConnect && sessionId) {
+      connect()
+    }
+
     return () => {
       disconnect()
     }
-  }, [disconnect])
+  }, [autoConnect, sessionId]) // eslint-disable-line react-hooks/exhaustive-deps
 
   return {
-    status,
-    send,
+    isConnected,
+    isReconnecting,
+    reconnectCount,
     connect,
     disconnect,
-    lastMessage,
-    isConnected: status === 'connected',
-  }
-}
-
-// Session-specific WebSocket hook
-interface SessionMessage {
-  type: 'phase_change' | 'slide_update' | 'timer_sync' | 'investor_message' | 'vote' | 'note' | 'audio_transcript'
-  payload: unknown
-}
-
-interface UseSessionWebSocketOptions {
-  sessionId: string
-  onPhaseChange?: (phase: string) => void
-  onSlideUpdate?: (slideIndex: number) => void
-  onTimerSync?: (timeLeft: number) => void
-  onInvestorMessage?: (message: { speaker: string; content: string }) => void
-  onVote?: (vote: { investorId: string; decision: string }) => void
-  onNote?: (note: { content: string; timestamp: number }) => void
-  onAudioTranscript?: (transcript: { text: string; isFinal: boolean }) => void
-}
-
-export function useSessionWebSocket({
-  sessionId,
-  onPhaseChange,
-  onSlideUpdate,
-  onTimerSync,
-  onInvestorMessage,
-  onVote,
-  onNote,
-  onAudioTranscript,
-}: UseSessionWebSocketOptions) {
-  const baseUrl = process.env.NEXT_PUBLIC_WS_URL || 'ws://localhost:8000'
-  const wsUrl = `${baseUrl}/ws/session/${sessionId}`
-
-  const handleMessage = useCallback(
-    (message: WebSocketMessage) => {
-      const { type, payload } = message as unknown as SessionMessage
-
-      switch (type) {
-        case 'phase_change':
-          onPhaseChange?.(payload as string)
-          break
-        case 'slide_update':
-          onSlideUpdate?.(payload as number)
-          break
-        case 'timer_sync':
-          onTimerSync?.(payload as number)
-          break
-        case 'investor_message':
-          onInvestorMessage?.(payload as { speaker: string; content: string })
-          break
-        case 'vote':
-          onVote?.(payload as { investorId: string; decision: string })
-          break
-        case 'note':
-          onNote?.(payload as { content: string; timestamp: number })
-          break
-        case 'audio_transcript':
-          onAudioTranscript?.(payload as { text: string; isFinal: boolean })
-          break
-        default:
-          console.log('Unknown message type:', type)
-      }
-    },
-    [onPhaseChange, onSlideUpdate, onTimerSync, onInvestorMessage, onVote, onNote, onAudioTranscript]
-  )
-
-  const ws = useWebSocket({
-    url: wsUrl,
-    onMessage: handleMessage,
-  })
-
-  // Session-specific send methods
-  const sendSlideChange = useCallback(
-    (slideIndex: number) => {
-      ws.send('slide_change', { slideIndex })
-    },
-    [ws]
-  )
-
-  const sendAudioChunk = useCallback(
-    (audioData: ArrayBuffer) => {
-      ws.send('audio_chunk', { data: Array.from(new Uint8Array(audioData)) })
-    },
-    [ws]
-  )
-
-  const sendUserResponse = useCallback(
-    (response: string) => {
-      ws.send('user_response', { content: response })
-    },
-    [ws]
-  )
-
-  return {
-    ...ws,
-    sendSlideChange,
+    sendMessage,
     sendAudioChunk,
-    sendUserResponse,
+    startPitch,
+    endPitch,
+    startQA,
+    answerComplete,
+    startCouncil,
   }
 }
-
-export default useWebSocket
