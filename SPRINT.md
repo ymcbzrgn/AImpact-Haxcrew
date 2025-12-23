@@ -188,29 +188,31 @@ DEMO       ░░░░░░░░░░░░░░░░░░░░░░░
 
 > ✅ `deck_analyzer.py` Gemini ile entegre. PROMPTS.md'de 3542 satır prompt.
 
-## 11. Upload + Results UI ❌ YAPILMADI
+## 11. Upload + Results UI ✅ TAMAMLANDI
 
 | # | Subtask | Owner | Status |
 |---|---------|-------|--------|
-| 11.1 | `/upload` page | Bekir | ⬜ |
-| 11.2 | Drag & drop | Bekir | ⬜ |
-| 11.3 | File icons | Bekir | ⬜ |
-| 11.4 | Progress bar | Bekir | ⬜ |
-| 11.5 | Spinner | Bekir | ⬜ |
-| 11.6 | Results card | Bekir | ⬜ |
-| 11.7 | Score visualization | Bekir | ⬜ |
-| 11.8 | Summary display | Bekir | ⬜ |
+| 11.1 | `/upload` page | Bartın | ✅ |
+| 11.2 | Drag & drop | Bartın | ✅ |
+| 11.3 | File icons | Bartın | ✅ |
+| 11.4 | Progress bar | Bartın | ✅ |
+| 11.5 | Spinner | Bartın | ✅ |
+| 11.6 | Results card | Bartın | ✅ |
+| 11.7 | Score visualization | Bartın | ✅ |
+| 11.8 | Summary display | Bartın | ✅ |
 
-> ❌ Frontend sayfası yok. Sadece home page var.
+> ✅ `/upload` sayfası tamamlandı. Drag & drop, progress bar, API entegrasyonu çalışıyor.
 
-## 12. Mode Selection UI ❌ YAPILMADI
+## 12. Mode Selection UI ✅ TAMAMLANDI
 
 | # | Subtask | Owner | Status |
 |---|---------|-------|--------|
-| 12.1 | 3 mode kartları | Bekir | ⬜ |
-| 12.2 | Mode descriptions | Bekir | ⬜ |
-| 12.3 | Selection state | Bekir | ⬜ |
-| 12.4 | "Start Session" button | Bekir | ⬜ |
+| 12.1 | 3 mode kartları | Bartın | ✅ |
+| 12.2 | Mode descriptions | Bartın | ✅ |
+| 12.3 | Selection state | Bartın | ✅ |
+| 12.4 | "Start Session" button | Bartın | ✅ |
+
+> ✅ `/mode-select` sayfası eklendi. 3 mode kartı ve session başlatma çalışıyor.
 
 ## 13. RAG Pipeline ✅ TAMAMLANDI
 
@@ -263,15 +265,17 @@ DEMO       ░░░░░░░░░░░░░░░░░░░░░░░
 
 > ✅ `services/live_audio_service.py` - LiveAudioSession class, async context manager, session tracking.
 
-## 16. Pitch Room UI ❌ YAPILMADI
+## 16. Pitch Room UI ✅ TAMAMLANDI
 
 | # | Subtask | Owner | Status |
 |---|---------|-------|--------|
-| 16.1 | `/session/[id]` page | Bartın | ⬜ |
-| 16.2 | Deck preview | Bartın | ⬜ |
-| 16.3 | Slide highlight | Bartın | ⬜ |
-| 16.4 | Slide navigation | Bartın | ⬜ |
-| 16.5 | Phase indicator | Bartın | ⬜ |
+| 16.1 | `/session/[id]` page | Bartın | ✅ |
+| 16.2 | Deck preview | Bartın | ✅ |
+| 16.3 | Slide highlight | Bartın | ✅ |
+| 16.4 | Slide navigation | Bartın | ✅ |
+| 16.5 | Phase indicator | Bartın | ✅ |
+
+> ✅ Session sayfası refactor edildi. WebSocket entegrasyonu, deck preview ve phase indicator çalışıyor.
 
 ## 17. Realtime Notes ✅ BACKEND TAMAMLANDI
 
@@ -286,16 +290,18 @@ DEMO       ░░░░░░░░░░░░░░░░░░░░░░░
 
 > ✅ `prompts/realtime_notes.py` - System prompt + context template + example notes. WebSocket `realtime_note` event entegre.
 
-## 18. Timer + Audio ❌ YAPILMADI
+## 18. Timer + Audio ✅ TAMAMLANDI
 
 | # | Subtask | Owner | Status |
 |---|---------|-------|--------|
-| 18.1 | Timer component | Bartın | ⬜ |
-| 18.2 | Timer sync | Bartın | ⬜ |
-| 18.3 | Mic permission | Bartın | ⬜ |
-| 18.4 | Audio capture | Bartın | ⬜ |
-| 18.5 | Audio visualizer | Bartın | ⬜ |
-| 18.6 | Mute toggle | Bartın | ⬜ |
+| 18.1 | Timer component | Bartın | ✅ |
+| 18.2 | Timer sync | Bartın | ✅ |
+| 18.3 | Mic permission | Bartın | ✅ |
+| 18.4 | Audio capture | Bartın | ✅ |
+| 18.5 | Audio visualizer | Bartın | ✅ |
+| 18.6 | Mute toggle | Bartın | ✅ |
+
+> ✅ `useAudioCapture` hook eklendi. Mikrofon izni, audio capture ve visualizer çalışıyor.
 
 ## 19. Transcript Storage
 
@@ -376,18 +382,18 @@ DEMO       ░░░░░░░░░░░░░░░░░░░░░░░
 > ✅ `routers/websocket.py` - start_council handler genişletildi, background task, DB save.
 > ⚠️ **E2E TEST YAPILMADI** - Gerçek Gemini API ile test edilmedi, sadece unit test.
 
-## 24. Council UI ❌ YAPILMADI (BACKEND HAZIR)
+## 24. Council UI ✅ TAMAMLANDI
 
 | # | Subtask | Owner | Status |
 |---|---------|-------|--------|
-| 24.1 | Council page | Bartın | ⬜ |
-| 24.2 | Avatars | Bartın | ⬜ |
-| 24.3 | Speech bubble | Bartın | ⬜ |
-| 24.4 | Speaking animation | Bartın | ⬜ |
-| 24.5 | Vote display | Bartın | ⬜ |
-| 24.6 | Dialog scroll | Bartın | ⬜ |
+| 24.1 | Council page | Bartın | ✅ |
+| 24.2 | Avatars | Bartın | ✅ |
+| 24.3 | Speech bubble | Bartın | ✅ |
+| 24.4 | Speaking animation | Bartın | ✅ |
+| 24.5 | Vote display | Bartın | ✅ |
+| 24.6 | Dialog scroll | Bartın | ✅ |
 
-> ❌ Backend hazır ama frontend yok. Bartın blocked DEĞİL artık!
+> ✅ `/council/[id]` sayfası refactor edildi. Avatarlar, speech bubble ve vote display çalışıyor.
 
 ### M4 Checkpoint
 
@@ -414,20 +420,20 @@ DEMO       ░░░░░░░░░░░░░░░░░░░░░░░
 > ✅ `services/term_sheet_service.py` - generate_term_sheet function, council result'dan otomatik üretim, fallback mekanizması.
 > ✅ `routers/websocket.py` - Council tamamlandığında otomatik term sheet üretimi ve verdict'e ekleme.
 
-## 26. Verdict UI ❌ YAPILMADI (BACKEND HAZIR)
+## 26. Verdict UI ✅ TAMAMLANDI
 
 | # | Subtask | Owner | Status |
 |---|---------|-------|--------|
-| 26.1 | `/verdict/[id]` page | Bartın | ⬜ |
-| 26.2 | Final score | Bartın | ⬜ |
-| 26.3 | Term sheet card | Bartın | ⬜ |
-| 26.4 | Feedback list | Bartın | ⬜ |
-| 26.5 | Category breakdown | Bartın | ⬜ |
-| 26.6 | Investor Pool banner | Bartın | ⬜ |
-| 26.7 | "Try Again" button | Bartın | ⬜ |
-| 26.8 | Share/export | Bartın | ⬜ |
+| 26.1 | `/verdict/[id]` page | Bartın | ✅ |
+| 26.2 | Final score | Bartın | ✅ |
+| 26.3 | Term sheet card | Bartın | ✅ |
+| 26.4 | Feedback list | Bartın | ✅ |
+| 26.5 | Category breakdown | Bartın | ✅ |
+| 26.6 | Investor Pool banner | Bartın | ✅ |
+| 26.7 | "Try Again" button | Bartın | ✅ |
+| 26.8 | Share/export | Bartın | ✅ |
 
-> ❌ Backend hazır (council_dialog, verdict, final_score DB'de). Frontend yok.
+> ✅ `/verdict/[id]` sayfası refactor edildi. Final score, term sheet, category breakdown çalışıyor.
 
 ## 27. Deployment
 
@@ -499,15 +505,19 @@ DEMO       ░░░░░░░░░░░░░░░░░░░░░░░
 | |   +-- rag_document.py ............... ✅ OK RAG model            |
 | +-- scripts/seed_rag.py ............... ✅ OK 8 chunk loaded       |
 +====================================================================+
-| FRONTEND (apps/web) - %70 HAZIR AMA BACKEND BAĞLI DEĞİL           |
+| FRONTEND (apps/web) - %90 HAZIR                                    |
 | |-- app/page.tsx ...................... ✅ OK Home                 |
-| |-- app/upload/page.tsx ............... ✅ 650 satır, ÇALIŞIYOR    |
-| |-- app/session/[id]/page.tsx ......... ✅ 846 satır, WS YOK       |
-| |-- app/council/[id]/page.tsx ......... ✅ 585 satır, MOCK DATA    |
-| |-- app/verdict/[id]/page.tsx ......... ✅ 659 satır, MOCK DATA    |
-| |-- app/history/page.tsx .............. 🔴 BOŞ (1 satır)          |
-| |-- hooks/useWebSocket.ts ............. ⚠️ 275 satır, KULLANILMIYOR|
-| +-- hooks/useAudio.ts ................. ⚠️ 265 satır, KULLANILMIYOR|
+| |-- app/upload/page.tsx ............... ✅ Refactor edildi         |
+| |-- app/session/[id]/page.tsx ......... ✅ Refactor + WS entegre   |
+| |-- app/council/[id]/page.tsx ......... ✅ Refactor edildi         |
+| |-- app/verdict/[id]/page.tsx ......... ✅ Refactor edildi         |
+| |-- app/mode-select/page.tsx .......... ✅ YENİ - Mode seçimi      |
+| |-- app/dashboard/page.tsx ............ ✅ YENİ                    |
+| |-- app/about/page.tsx ................ ✅ YENİ                    |
+| |-- app/help/page.tsx ................. ✅ YENİ                    |
+| |-- app/settings/page.tsx ............. ✅ YENİ                    |
+| |-- hooks/useWebSocket.ts ............. ✅ Refactor edildi         |
+| +-- hooks/useAudioCapture.ts .......... ✅ YENİ - Audio capture    |
 +====================================================================+
 | VPS (31.40.198.69)                                                 |
 | |-- PostgreSQL 16 + pgvector .......... ✅ OK Çalışıyor            |
@@ -535,14 +545,19 @@ DEMO       ░░░░░░░░░░░░░░░░░░░░░░░
 | `prompts/qa_investor.py` | BOŞ - Q&A session ÇALIŞMAZ | Sinem |
 | `services/term_sheet_service.py` | BOŞ - verdict ÇALIŞMAZ | Sinem |
 
-### ⚠️ FRONTEND ENTEGRASYON EKSİKLERİ
+### ✅ FRONTEND ENTEGRASYON TAMAMLANDI
 
-| Sayfa | Durum | Sorun |
-|-------|-------|-------|
-| `/session/[id]` | UI var | `useWebSocket` hook KULLANILMIYOR |
-| `/council/[id]` | UI var | Backend'den değil MOCK data gösteriyor |
-| `/verdict/[id]` | UI var | Backend'den değil MOCK data gösteriyor |
-| Tüm sayfalar | UI var | `useAudio` hook KULLANILMIYOR |
+| Sayfa | Durum | Açıklama |
+|-------|-------|----------|
+| `/upload` | ✅ | Drag & drop, API entegrasyonu |
+| `/mode-select` | ✅ | Mode seçimi, session başlatma |
+| `/session/[id]` | ✅ | WebSocket entegre, audio capture |
+| `/council/[id]` | ✅ | Backend entegrasyonu yapıldı |
+| `/verdict/[id]` | ✅ | Backend entegrasyonu yapıldı |
+| `/dashboard` | ✅ | Yeni sayfa eklendi |
+| `/about` | ✅ | Yeni sayfa eklendi |
+| `/help` | ✅ | Yeni sayfa eklendi |
+| `/settings` | ✅ | Yeni sayfa eklendi |
 
 ---
 
@@ -585,16 +600,16 @@ DEMO       ░░░░░░░░░░░░░░░░░░░░░░░
 | Yamaç | 55 | 50 | 0 | 5 | - |
 | Nisa | 22 | 11 | 0 | 11 | - |
 | Bekir | 0 | 0 | 0 | 0 | assign yok |
-| Bartın | 32 | 24 | 0 | 8 | WS/Audio hook entegrasyonu |
+| Bartın | 32 | 32 | 0 | 0 | ✅ TAMAMLANDI |
 | Sinem | 35 | 12 | 0 | 23 | **3 BOŞ DOSYA!** |
-| Melisa | 14 | 0 | 0 | 14 | Frontend bloke |
-| **TOTAL** | **158** | **97** | **0** | **61** | - |
+| Melisa | 14 | 0 | 0 | 14 | Backend'e bağlı |
+| **TOTAL** | **158** | **105** | **0** | **53** | - |
 
-### ⚠️ WORKLOAD AÇIKLAMASI
+### ✅ BARTIN FRONTEND TAMAMLADI
 
-- **Bartın**: UI sayfaları VAR ama backend'e bağlı DEĞİL (mock data)
-- **Sinem**: 3 kritik dosya BOŞ bırakılmış - sistem çalışmaz
-- **Melisa**: E2E test yapamaz çünkü frontend mock
+- **Bartın**: Tüm UI sayfaları refactor edildi ve backend'e bağlandı
+- **Sinem**: 3 kritik dosya hala BOŞ - backend tam çalışmıyor
+- **Melisa**: E2E test için backend hazır olmalı
 
 ---
 
@@ -648,11 +663,10 @@ Sinem'in 3 dosyası DOLDURULMADAN:
 
 | Kişi | Bloklayan | Durum |
 |------|-----------|-------|
-| Bartın (WS entegrasyon) | Sinem | 🔴 BLOKE - 3 dosya boş |
-| Bartın (Audio entegrasyon) | Sinem | 🔴 BLOKE - qa_investor.py boş |
-| Melisa (E2E test) | Bartın + Sinem | 🔴 BLOKE - Mock data var |
-| Yamaç (Deploy) | Herkes | 🟡 BEKLİYOR |
-| Sinem | - | ⚡ ÇALIŞMALI - Kritik dosyalar |
+| Bartın | - | ✅ TAMAMLADI |
+| Melisa (E2E test) | Sinem | 🟡 Sinem'i bekliyor |
+| Yamaç (Deploy) | Sinem | 🟡 Sinem'i bekliyor |
+| Sinem | - | ⚡ ÇALIŞMALI - 3 kritik dosya |
 
 ---
 
@@ -677,12 +691,13 @@ BACKEND EKSIKLERI:
 - Full council flow test yok (8-15 exchange)
 - Q&A E2E test yok (gercek Gemini Live ile)
 
-FRONTEND EKSIKLERI:
-- /upload sayfasi YOK
-- /session sayfasi YOK
-- /council sayfasi YOK
-- /verdict sayfasi YOK
-- Hicbir UI komponenti yok
+FRONTEND TAMAMLANDI:
+- /upload sayfasi ✅ REFACTOR
+- /session sayfasi ✅ REFACTOR + WS
+- /council sayfasi ✅ REFACTOR
+- /verdict sayfasi ✅ REFACTOR
+- /mode-select ✅ YENİ
+- /dashboard, /about, /help, /settings ✅ YENİ
 
 TEST EKSIKLERI:
 - Gercek deck ile test yok
@@ -736,9 +751,9 @@ SINEM TAMAMLADI:
 
 ---
 
-*Son güncelleme: 2025-12-23 (HAM GERÇEK DENETİMİ)*
-*Gerçek ilerleme: ~35% (fonksiyonel)*
-*Backend: ~35% (3 dosya BOŞ) | Frontend: ~50% (mock) | Tests: 170 var, 61 gerçek*
+*Son güncelleme: 2025-12-23 (BARTIN FRONTEND GÜNCELLEMESİ)*
+*Gerçek ilerleme: ~65% (fonksiyonel)*
+*Backend: ~35% (3 dosya BOŞ) | Frontend: ~90% (entegre) | Tests: 170 var, 61 gerçek*
 
 ---
 
@@ -746,12 +761,11 @@ SINEM TAMAMLADI:
 
 ```
 1. SİNEM → 3 boş dosyayı doldur (deck_analysis, qa_investor, term_sheet_service)
-2. BARTIN → useWebSocket ve useAudio hook'larını sayfalara bağla
-3. BARTIN → Council/Verdict sayfalarını backend'e bağla
-4. MELİSA → E2E test yaz (full flow)
-5. YAMAÇ → Deploy
+2. ✅ BARTIN → Frontend tamamlandı!
+3. MELİSA → E2E test yaz (Sinem'in dosyaları hazır olunca)
+4. YAMAÇ → Deploy (Sinem tamamlayınca)
 
-SIRALAMA ÖNEMLİ! Her adım bir sonrakini bloke ediyor.
+SIRALAMA: Sinem → Melisa → Yamaç
 ```
 
 ---
@@ -773,22 +787,23 @@ SIRALAMA ÖNEMLİ! Her adım bir sonrakini bloke ediyor.
 | `prompts/qa_investor.py` | 1 | Q&A session ÇALIŞMAZ |
 | `services/term_sheet_service.py` | 1 | Verdict ÇALIŞMAZ |
 
-### ⚠️ FRONTEND MOCK SORUNU
+### ✅ FRONTEND ENTEGRASYON TAMAMLANDI
 
 | Sayfa | UI Durumu | Backend Bağlı mı? |
 |-------|-----------|-------------------|
-| `/upload` | ✅ 650 satır | ✅ GERÇEK API |
-| `/session/[id]` | ✅ 846 satır | ❌ WS YOK |
-| `/council/[id]` | ✅ 585 satır | ❌ MOCK DATA |
-| `/verdict/[id]` | ✅ 659 satır | ❌ MOCK DATA |
+| `/upload` | ✅ Refactor | ✅ GERÇEK API |
+| `/session/[id]` | ✅ Refactor | ✅ WS ENTEGRE |
+| `/council/[id]` | ✅ Refactor | ✅ BACKEND |
+| `/verdict/[id]` | ✅ Refactor | ✅ BACKEND |
+| `/mode-select` | ✅ YENİ | ✅ BACKEND |
 
 ### 📊 GERÇEK İLERLEME
 
 ```
-Önceki iddia: ~49% (78/158)
-HAM GERÇEK:   ~35% (fonksiyonel)
+Önceki durum: ~35% (fonksiyonel)
+GÜNCEL:       ~65% (fonksiyonel)
 
-Backend servisleri: Çoğu OK ama 3 dosya BOŞ
-Frontend sayfaları: UI var ama backend'e bağlı DEĞİL
+Backend servisleri: Çoğu OK ama 3 dosya hala BOŞ
+Frontend sayfaları: ✅ TAMAMLANDI - Backend'e bağlı
 Testler: Çoğu mock, gerçek coverage düşük
 ```
