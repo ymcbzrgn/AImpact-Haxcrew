@@ -119,9 +119,10 @@ class CouncilSession:
     async def _generate_response(
         self,
         character: str,
-        extra_instruction: str = ""
+        extra_instruction: str = "",
+        max_retries: int = 3
     ) -> Dict[str, Any]:
-        """Generate response from a character using Gemini Pro"""
+        """Generate response from a character using Gemini Pro with retry logic"""
         system_prompt = get_character_prompt(character)
         if not system_prompt:
             raise ValueError(f"Unknown character: {character}")
@@ -129,10 +130,43 @@ class CouncilSession:
         context = self._build_context()
         full_prompt = f"{context}\n\n{extra_instruction}" if extra_instruction else context
 
-        response_text = await generate_text_pro(
-            prompt=full_prompt,
-            system_instruction=system_prompt
-        )
+        # Rate limiting - small delay between API calls
+        await asyncio.sleep(0.5)
+
+        response_text = None
+        last_error = None
+
+        for attempt in range(max_retries):
+            try:
+                response_text = await generate_text_pro(
+                    prompt=full_prompt,
+                    system_instruction=system_prompt
+                )
+                break  # Success, exit retry loop
+            except Exception as e:
+                last_error = e
+                if attempt < max_retries - 1:
+                    # Exponential backoff
+                    wait_time = (2 ** attempt) + 1
+                    print(f"[Council] API error, retrying in {wait_time}s: {e}")
+                    await asyncio.sleep(wait_time)
+                else:
+                    # Return fallback response on final failure
+                    print(f"[Council] API failed after {max_retries} retries: {e}")
+                    return {
+                        "speaker": character,
+                        "content": f"I need more time to analyze this pitch thoroughly.",
+                        "sentiment": "neutral",
+                        "timestamp": self.exchange_count
+                    }
+
+        if response_text is None:
+            return {
+                "speaker": character,
+                "content": "Let me think about this more carefully.",
+                "sentiment": "neutral",
+                "timestamp": self.exchange_count
+            }
 
         # Parse JSON response
         try:
@@ -160,7 +194,7 @@ class CouncilSession:
             # Fallback: treat as plain text message
             return {
                 "speaker": character,
-                "message": response_text.strip(),
+                "content": response_text.strip(),
                 "sentiment": "neutral",
                 "timestamp": self.exchange_count
             }
@@ -325,7 +359,7 @@ class CouncilSession:
 
             # Parse vote
             score = vote_response.get("score", 50)
-            rationale = vote_response.get("rationale", vote_response.get("message", ""))
+            rationale = vote_response.get("rationale", vote_response.get("content", ""))
 
             # Validate score
             if isinstance(score, str):
@@ -385,9 +419,9 @@ class CouncilSession:
 
         for msg in self.messages:
             if msg.get("sentiment") == "positive":
-                key_strengths.append(msg.get("message", "")[:100])
+                key_strengths.append(msg.get("content", "")[:100])
             elif msg.get("sentiment") == "negative":
-                key_concerns.append(msg.get("message", "")[:100])
+                key_concerns.append(msg.get("content", "")[:100])
 
         return CouncilResult(
             average_score=round(average, 1),

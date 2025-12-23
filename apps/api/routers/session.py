@@ -1,22 +1,20 @@
 """
 Session router - handles pitch session lifecycle
-Now with PostgreSQL persistence and deck analysis trigger
+Now with in-memory storage fallback for development
 """
 
-from fastapi import APIRouter, UploadFile, File, HTTPException, Depends, BackgroundTasks
+from fastapi import APIRouter, UploadFile, File, HTTPException, BackgroundTasks
 from pydantic import BaseModel
-from typing import Optional, Dict
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
+from typing import Optional, Dict, Any, List
 import uuid
 import os
 import json
-import aiofiles
-
-from services.database import get_db
-from models.session import Session
+from datetime import datetime
 
 router = APIRouter()
+
+# In-memory session storage for development
+_sessions: Dict[str, Dict[str, Any]] = {}
 
 
 class SessionCreate(BaseModel):
@@ -29,87 +27,100 @@ class SessionResponse(BaseModel):
     error: Optional[dict] = None
 
 
+def _get_session(session_id: str) -> Optional[Dict[str, Any]]:
+    """Get session from in-memory storage"""
+    return _sessions.get(session_id)
+
+
+def _save_session(session_id: str, session_data: Dict[str, Any]):
+    """Save session to in-memory storage"""
+    _sessions[session_id] = session_data
+
+
 async def _run_deck_analysis(session_id: str, file_bytes: bytes, file_ext: str):
     """Background task to analyze deck after upload"""
+    print(f"[Analysis] Starting for session {session_id[:8]}...")
     try:
         from services.deck_analyzer import extract_slides, analyze_deck
-        from services.database import get_session_maker
 
-        session_maker = get_session_maker()
-        async with session_maker() as db:
-            try:
-                # Get session
-                result = await db.execute(
-                    select(Session).where(Session.id == uuid.UUID(session_id))
-                )
-                session = result.scalar_one_or_none()
-                if not session:
-                    return
+        session = _get_session(session_id)
+        if not session:
+            print(f"[Analysis] Session {session_id[:8]} not found!")
+            return
 
-                # Update status to processing
-                session.status = "processing"
-                await db.commit()
+        # Update status to processing
+        session["status"] = "processing"
+        _save_session(session_id, session)
+        print(f"[Analysis] Status set to processing")
 
-                # Extract slides
-                slides = await extract_slides(file_bytes, file_ext)
+        # Extract slides
+        print(f"[Analysis] Extracting slides from {file_ext}...")
+        slides = await extract_slides(file_bytes, file_ext)
+        print(f"[Analysis] Extracted {len(slides)} slides, first has image: {bool(slides[0].get('image_base64')) if slides else 'N/A'}")
 
-                # Save slide contents
-                session.slide_contents = slides
-                session.deck_format = file_ext.lstrip(".")
-                await db.commit()
+        # Save slide contents
+        session["slide_contents"] = slides
+        session["deck_format"] = file_ext.lstrip(".")
+        _save_session(session_id, session)
 
-                # Run analysis
-                analysis = await analyze_deck(slides, feedback_tone="constructive")
+        # Run analysis
+        print(f"[Analysis] Running AI analysis...")
+        analysis = await analyze_deck(slides, feedback_tone="constructive")
+        print(f"[Analysis] AI analysis complete, success: {analysis.get('success')}")
 
-                if analysis.get("success"):
-                    session.deck_analysis = analysis.get("data")
-                    session.status = "ready"
-                else:
-                    # Store error for debugging
-                    session.deck_analysis = {
-                        "error": analysis.get("error"),
-                        "raw_response": analysis.get("raw_response")
-                    }
-                    session.status = "analysis_failed"
+        if analysis.get("success"):
+            session["deck_analysis"] = analysis.get("data")
+            session["status"] = "ready"
+            print(f"[Analysis] Session {session_id[:8]} is READY with {len(slides)} slides")
+        else:
+            # Store error for debugging
+            session["deck_analysis"] = {
+                "error": analysis.get("error"),
+                "raw_response": analysis.get("raw_response")
+            }
+            session["status"] = "analysis_failed"
 
-                await db.commit()
+        _save_session(session_id, session)
 
-            except Exception as e:
-                try:
-                    session.status = "error"
-                    session.deck_analysis = {"error": str(e)}
-                    await db.commit()
-                except Exception:
-                    pass  # Silently fail if DB is unavailable
-
-    except Exception:
-        # Silently handle any errors (event loop closed, etc.)
-        pass
+    except Exception as e:
+        print(f"[ERROR] Deck analysis failed: {e}")
+        session = _get_session(session_id)
+        if session:
+            session["status"] = "error"
+            session["deck_analysis"] = {"error": str(e)}
+            _save_session(session_id, session)
 
 
 @router.post("/session")
-async def create_session(
-    body: SessionCreate = None,
-    db: AsyncSession = Depends(get_db)
-):
+async def create_session(body: SessionCreate = None):
     """Create a new pitch session"""
     mode = body.investor_mode if body else "friendly"
+    session_id = str(uuid.uuid4())
 
-    # Create session in database
-    session = Session(
-        investor_mode=mode,
-        status="created"
-    )
-    db.add(session)
-    await db.commit()
-    await db.refresh(session)
+    # Create session in memory
+    session_data = {
+        "id": session_id,
+        "investor_mode": mode,
+        "status": "created",
+        "created_at": datetime.utcnow().isoformat(),
+        "deck_path": None,
+        "deck_format": None,
+        "deck_analysis": None,
+        "slide_contents": None,
+        "pitch_transcript": None,
+        "qa_transcript": [],
+        "realtime_notes": [],
+        "verdict": None,
+        "final_score": None
+    }
+    _save_session(session_id, session_data)
 
     return SessionResponse(
         success=True,
         data={
-            "session_id": str(session.id),
-            "status": session.status,
-            "investor_mode": session.investor_mode
+            "session_id": session_id,
+            "status": "created",
+            "investor_mode": mode
         }
     )
 
@@ -118,20 +129,11 @@ async def create_session(
 async def upload_deck(
     session_id: str,
     background_tasks: BackgroundTasks,
-    file: UploadFile = File(...),
-    db: AsyncSession = Depends(get_db)
+    file: UploadFile = File(...)
 ):
     """Upload pitch deck to session and trigger analysis"""
 
-    # Check session exists
-    try:
-        result = await db.execute(
-            select(Session).where(Session.id == uuid.UUID(session_id))
-        )
-        session = result.scalar_one_or_none()
-    except Exception:
-        session = None
-
+    session = _get_session(session_id)
     if not session:
         return SessionResponse(
             success=False,
@@ -172,17 +174,16 @@ async def upload_deck(
     safe_filename = f"{session_id}{ext}"
     file_path = os.path.join(upload_dir, safe_filename)
 
-    async with aiofiles.open(file_path, "wb") as f:
-        await f.write(contents)
+    with open(file_path, "wb") as f:
+        f.write(contents)
 
     # Update session
-    session.deck_path = file_path
-    session.status = "uploaded"
-    await db.commit()
+    session["deck_path"] = file_path
+    session["status"] = "uploaded"
+    _save_session(session_id, session)
 
-    # Trigger background analysis (skip in test mode for async stability)
-    if not os.getenv("TESTING"):
-        background_tasks.add_task(_run_deck_analysis, session_id, contents, ext)
+    # Trigger background analysis
+    background_tasks.add_task(_run_deck_analysis, session_id, contents, ext)
 
     return SessionResponse(
         success=True,
@@ -197,20 +198,10 @@ async def upload_deck(
 
 
 @router.get("/session/{session_id}")
-async def get_session(
-    session_id: str,
-    db: AsyncSession = Depends(get_db)
-):
+async def get_session(session_id: str):
     """Get session status and data"""
 
-    try:
-        result = await db.execute(
-            select(Session).where(Session.id == uuid.UUID(session_id))
-        )
-        session = result.scalar_one_or_none()
-    except Exception:
-        session = None
-
+    session = _get_session(session_id)
     if not session:
         return SessionResponse(
             success=False,
@@ -220,52 +211,42 @@ async def get_session(
     return SessionResponse(
         success=True,
         data={
-            "session_id": str(session.id),
-            "status": session.status,
-            "investor_mode": session.investor_mode,
-            "deck_path": session.deck_path,
-            "deck_format": session.deck_format,
-            "deck_analysis": session.deck_analysis,
-            "slide_contents": session.slide_contents,
-            "created_at": session.created_at.isoformat() if session.created_at else None
+            "session_id": session["id"],
+            "status": session["status"],
+            "investor_mode": session["investor_mode"],
+            "deck_path": session["deck_path"],
+            "deck_format": session["deck_format"],
+            "deck_analysis": session["deck_analysis"],
+            "slide_contents": session["slide_contents"],
+            "created_at": session["created_at"]
         }
     )
 
 
 @router.post("/session/{session_id}/start")
-async def start_pitch(
-    session_id: str,
-    db: AsyncSession = Depends(get_db)
-):
+async def start_pitch(session_id: str):
     """Start the pitch session"""
 
-    try:
-        result = await db.execute(
-            select(Session).where(Session.id == uuid.UUID(session_id))
-        )
-        session = result.scalar_one_or_none()
-    except Exception:
-        session = None
-
+    session = _get_session(session_id)
     if not session:
         return SessionResponse(
             success=False,
             error={"code": "SESSION_NOT_FOUND", "message": "Session not found"}
         )
 
-    if session.status not in ["uploaded", "ready"]:
+    if session["status"] not in ["uploaded", "ready", "processing"]:
         return SessionResponse(
             success=False,
             error={"code": "INVALID_STATE", "message": "Upload a deck first"}
         )
 
-    session.status = "pitching"
-    await db.commit()
+    session["status"] = "pitching"
+    _save_session(session_id, session)
 
     return SessionResponse(
         success=True,
         data={
-            "session_id": str(session.id),
+            "session_id": session_id,
             "status": "pitching",
             "message": "Connect to WebSocket to start"
         }
@@ -273,20 +254,10 @@ async def start_pitch(
 
 
 @router.get("/session/{session_id}/verdict")
-async def get_verdict(
-    session_id: str,
-    db: AsyncSession = Depends(get_db)
-):
+async def get_verdict(session_id: str):
     """Get final verdict and feedback"""
 
-    try:
-        result = await db.execute(
-            select(Session).where(Session.id == uuid.UUID(session_id))
-        )
-        session = result.scalar_one_or_none()
-    except Exception:
-        session = None
-
+    session = _get_session(session_id)
     if not session:
         return SessionResponse(
             success=False,
@@ -296,54 +267,55 @@ async def get_verdict(
     return SessionResponse(
         success=True,
         data={
-            "session_id": str(session.id),
-            "status": session.status,
-            "verdict": session.verdict,
-            "deck_analysis": session.deck_analysis,
-            "final_score": session.final_score
+            "session_id": session["id"],
+            "status": session["status"],
+            "verdict": session["verdict"],
+            "deck_analysis": session["deck_analysis"],
+            "final_score": session["final_score"]
         }
     )
 
 
 @router.get("/session/{session_id}/transcript")
-async def get_transcript(
-    session_id: str,
-    db: AsyncSession = Depends(get_db)
-):
+async def get_transcript(session_id: str):
     """Get pitch transcript, Q&A transcript, and realtime notes"""
 
-    try:
-        result = await db.execute(
-            select(Session).where(Session.id == uuid.UUID(session_id))
-        )
-        session = result.scalar_one_or_none()
-    except Exception:
-        session = None
-
+    session = _get_session(session_id)
     if not session:
         return SessionResponse(
             success=False,
             error={"code": "SESSION_NOT_FOUND", "message": "Session not found"}
         )
 
-    # Parse transcripts from JSON strings
+    # Parse transcripts
     pitch_transcript = []
-    qa_transcript = session.qa_transcript or []
-    realtime_notes = session.realtime_notes or []
-
     try:
-        if session.pitch_transcript:
-            pitch_transcript = json.loads(session.pitch_transcript)
+        if session.get("pitch_transcript"):
+            pitch_transcript = json.loads(session["pitch_transcript"])
     except json.JSONDecodeError:
         pitch_transcript = []
 
     return SessionResponse(
         success=True,
         data={
-            "session_id": str(session.id),
-            "status": session.status,
+            "session_id": session["id"],
+            "status": session["status"],
             "pitch_transcript": pitch_transcript,
-            "qa_transcript": qa_transcript,
-            "realtime_notes": realtime_notes
+            "qa_transcript": session.get("qa_transcript", []),
+            "realtime_notes": session.get("realtime_notes", [])
         }
     )
+
+
+# Helper to access sessions from other modules (e.g., websocket)
+def get_session_data(session_id: str) -> Optional[Dict[str, Any]]:
+    """Get session data for use in other modules"""
+    return _get_session(session_id)
+
+
+def update_session_data(session_id: str, updates: Dict[str, Any]):
+    """Update session data from other modules"""
+    session = _get_session(session_id)
+    if session:
+        session.update(updates)
+        _save_session(session_id, session)

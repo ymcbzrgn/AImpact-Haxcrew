@@ -1,18 +1,23 @@
 'use client'
 
-import { useEffect, useState, useRef } from 'react'
+import { useEffect, useState, useRef, useCallback } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
+import Image from 'next/image'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { useSessionStore } from '@/stores/session'
 import { apiCall } from '@/lib/api'
+import { useWebSocket } from '@/hooks/useWebSocket'
+import { useAudio } from '@/hooks/useAudio'
 
 // Types
 interface SlideData {
   slide_number: number
   image_url?: string
+  image_base64?: string
   text_content?: string
+  content?: string
 }
 
 interface SessionData {
@@ -23,6 +28,11 @@ interface SessionData {
   current_slide?: number
   total_slides?: number
   slides?: SlideData[]
+  slide_contents?: Array<{
+    slide_number: number
+    content?: string
+    image_base64?: string
+  }>
   deck_analysis?: {
     scores?: {
       overall_score?: number
@@ -38,6 +48,12 @@ interface Message {
   content: string
   timestamp: Date
   investor_name?: string
+}
+
+interface RealtimeNote {
+  note: string
+  type: string
+  timestamp: number
 }
 
 // SVG Icons
@@ -162,11 +178,16 @@ function VideoOffIcon({ className }: { className?: string }) {
   )
 }
 
-function UserIcon({ className }: { className?: string }) {
+// UserIcon removed - not used
+
+function NoteIcon({ className }: { className?: string }) {
   return (
     <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-      <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
-      <circle cx="12" cy="7" r="4" />
+      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+      <polyline points="14 2 14 8 20 8" />
+      <line x1="16" y1="13" x2="8" y2="13" />
+      <line x1="16" y1="17" x2="8" y2="17" />
+      <polyline points="10 9 9 9 8 9" />
     </svg>
   )
 }
@@ -196,19 +217,26 @@ function Timer({
   onTimeEnd?: () => void
 }) {
   const [timeLeft, setTimeLeft] = useState(initialTime)
+  const onTimeEndRef = useRef(onTimeEnd)
 
+  // Update ref when callback changes
+  useEffect(() => {
+    onTimeEndRef.current = onTimeEnd
+  }, [onTimeEnd])
+
+  // Reset when initialTime changes
   useEffect(() => {
     setTimeLeft(initialTime)
   }, [initialTime])
 
+  // Timer logic - only depends on isRunning
   useEffect(() => {
-    if (!isRunning || timeLeft <= 0) return
+    if (!isRunning) return
 
     const timer = setInterval(() => {
       setTimeLeft((prev) => {
         if (prev <= 1) {
-          clearInterval(timer)
-          onTimeEnd?.()
+          onTimeEndRef.current?.()
           return 0
         }
         return prev - 1
@@ -216,7 +244,7 @@ function Timer({
     }, 1000)
 
     return () => clearInterval(timer)
-  }, [isRunning, timeLeft, onTimeEnd])
+  }, [isRunning])
 
   const minutes = Math.floor(timeLeft / 60)
   const seconds = timeLeft % 60
@@ -230,22 +258,36 @@ function Timer({
 }
 
 // Audio Visualizer Component
-function AudioVisualizer({ isActive }: { isActive: boolean }) {
+function AudioVisualizer({ level, isRecording }: { level: number; isRecording: boolean }) {
   const bars = 5
+  // Use a stable pattern based on bar index, modulated by audio level
+  const getBarHeight = (index: number) => {
+    if (!isRecording) return 4
+    // Create wave-like pattern that responds to audio level
+    const basePattern = [0.6, 0.8, 1.0, 0.8, 0.6]
+    const normalizedLevel = Math.min(1, Math.max(0, level))
+    // Add some variation based on level
+    const height = 4 + (normalizedLevel * 28 * basePattern[index])
+    return Math.max(4, height)
+  }
+
   return (
-    <div className="flex items-end gap-1 h-8">
-      {Array.from({ length: bars }).map((_, i) => (
-        <div
-          key={i}
-          className={`w-1 bg-accent-custom rounded-full transition-all duration-150 ${
-            isActive ? 'animate-pulse' : ''
-          }`}
-          style={{
-            height: isActive ? `${Math.random() * 24 + 8}px` : '4px',
-            animationDelay: `${i * 0.1}s`,
-          }}
-        />
-      ))}
+    <div className="flex items-center gap-1">
+      {/* Recording indicator dot */}
+      {isRecording && (
+        <div className="w-2 h-2 bg-red-500 rounded-full animate-pulse mr-1" />
+      )}
+      <div className="flex items-end gap-1 h-8">
+        {Array.from({ length: bars }).map((_, i) => (
+          <div
+            key={i}
+            className={`w-1.5 rounded-full transition-all duration-100 ${
+              isRecording ? 'bg-red-500' : 'bg-neutral-300'
+            }`}
+            style={{ height: `${getBarHeight(i)}px` }}
+          />
+        ))}
+      </div>
     </div>
   )
 }
@@ -272,9 +314,9 @@ function SlidePreview({
               : 'border-transparent hover:border-neutral-300'
           }`}
         >
-          {slide.image_url ? (
+          {slide.image_base64 ? (
             <img
-              src={slide.image_url}
+              src={`data:image/png;base64,${slide.image_base64}`}
               alt={`Slide ${index + 1}`}
               className="w-full h-full object-cover rounded"
             />
@@ -306,7 +348,6 @@ export default function SessionPage() {
   const [isTimerRunning, setIsTimerRunning] = useState(false)
   const [isMicOn, setIsMicOn] = useState(false)
   const [isCameraOn, setIsCameraOn] = useState(false)
-  const [isConnected, setIsConnected] = useState(false)
   const [cameraStream, setCameraStream] = useState<MediaStream | null>(null)
   const videoRef = useRef<HTMLVideoElement>(null)
 
@@ -315,12 +356,172 @@ export default function SessionPage() {
   const [inputMessage, setInputMessage] = useState('')
   const messagesEndRef = useRef<HTMLDivElement>(null)
 
+  // Realtime notes state
+  const [realtimeNotes, setRealtimeNotes] = useState<RealtimeNote[]>([])
+
+  // Slide loading state
+  const [slidesLoading, setSlidesLoading] = useState(false)
+  const pollIntervalRef = useRef<NodeJS.Timeout | null>(null)
+
+  // AI Audio playback
+  const audioQueueRef = useRef<string[]>([])
+  const isPlayingRef = useRef(false)
+  const [isAISpeaking, setIsAISpeaking] = useState(false)
+
   // Mock slides for demo
   const mockSlides: SlideData[] = Array.from({ length: 10 }, (_, i) => ({
     slide_number: i + 1,
     text_content: `Slide ${i + 1}`,
   }))
 
+  // WebSocket URL - Use correct backend format
+  const wsUrl = `${process.env.NEXT_PUBLIC_WS_URL || 'ws://localhost:8000'}/ws/${sessionId}`
+
+  // Play audio from queue - defined before handleWebSocketMessage since it's used there
+  const playNextAudio = useCallback(async () => {
+    if (isPlayingRef.current || audioQueueRef.current.length === 0) return
+
+    isPlayingRef.current = true
+    setIsAISpeaking(true)
+
+    const audioData = audioQueueRef.current.shift()
+    if (audioData) {
+      try {
+        const audio = new Audio(`data:audio/wav;base64,${audioData}`)
+        audio.onended = () => {
+          isPlayingRef.current = false
+          setIsAISpeaking(false)
+          // Note: We can't call playNextAudio here directly due to closure, handled separately
+        }
+        audio.onerror = () => {
+          isPlayingRef.current = false
+          setIsAISpeaking(false)
+        }
+        await audio.play()
+      } catch {
+        console.error('Error playing audio')
+        isPlayingRef.current = false
+        setIsAISpeaking(false)
+      }
+    }
+  }, [])
+
+  // Handle WebSocket messages
+  const handleWebSocketMessage = useCallback((message: { type: string; payload: unknown; timestamp: number }) => {
+    console.log('WebSocket message received:', message)
+    const data = message.payload as Record<string, unknown> || {}
+
+    switch (message.type) {
+      case 'connected':
+        console.log('WebSocket connected to session')
+        break
+
+      case 'reconnected':
+        console.log('WebSocket reconnected')
+        break
+
+      case 'phase_change':
+        const newPhase = (data.phase as string || 'pitch') as 'pitch' | 'qa' | 'council' | 'verdict'
+        setCurrentPhase(newPhase)
+        if (newPhase === 'qa') {
+          setIsTimerRunning(false)
+        }
+        break
+
+      case 'realtime_note':
+        const note: RealtimeNote = {
+          note: data.note as string || '',
+          type: data.type as string || 'coaching',
+          timestamp: data.timestamp as number || Date.now(),
+        }
+        setRealtimeNotes(prev => [...prev.slice(-9), note]) // Keep last 10 notes
+        break
+
+      case 'ai_speaking':
+        const audioData = data.audio as string
+        if (audioData) {
+          audioQueueRef.current.push(audioData)
+          playNextAudio()
+        }
+        break
+
+      case 'qa_question':
+        const question = data.question as string || ''
+        const investorName = data.investor_name as string || 'VC Panel'
+        setMessages(prev => [...prev, {
+          id: Date.now().toString(),
+          role: 'investor',
+          content: question,
+          timestamp: new Date(),
+          investor_name: investorName,
+        }])
+        break
+
+      case 'qa_complete':
+        console.log('Q&A complete')
+        // Automatically navigate to council after a short delay
+        setTimeout(() => {
+          router.push(`/council/${sessionId}`)
+        }, 2000)
+        break
+
+      case 'council_result':
+        // Council finished, go to verdict
+        setTimeout(() => {
+          router.push(`/verdict/${sessionId}`)
+        }, 2000)
+        break
+
+      case 'session_complete':
+        router.push(`/verdict/${sessionId}`)
+        break
+
+      case 'error':
+        console.error('WebSocket error:', data.message)
+        break
+
+      default:
+        console.log('Unknown message type:', message.type)
+    }
+  }, [router, sessionId, playNextAudio])
+
+  // WebSocket hook
+  const {
+    status: wsStatus,
+    send: wsSend,
+    connect: wsConnect,
+    isConnected
+  } = useWebSocket({
+    url: wsUrl,
+    onMessage: handleWebSocketMessage,
+    onConnect: () => console.log('WebSocket connected'),
+    onDisconnect: () => console.log('WebSocket disconnected'),
+    onError: (e) => console.error('WebSocket error:', e),
+    reconnect: true,
+    reconnectAttempts: 5,
+  })
+
+  // Audio hook for recording
+  const {
+    audioLevel,
+    startRecording,
+    stopRecording
+  } = useAudio({
+    onAudioChunk: (chunk: Blob) => {
+      // Convert blob to base64 and send via WebSocket
+      const reader = new FileReader()
+      reader.onloadend = () => {
+        const base64 = reader.result?.toString().split(',')[1]
+        if (base64 && isConnected) {
+          wsSend('audio_chunk', { audio: base64, timestamp: Date.now() })
+        }
+      }
+      reader.readAsDataURL(chunk)
+    },
+    chunkInterval: 500, // Send chunks every 500ms
+  })
+
+  // Fetch session data and connect WebSocket
   useEffect(() => {
     async function fetchSession() {
       try {
@@ -333,22 +534,70 @@ export default function SessionPage() {
           if (response.data.current_slide !== undefined) {
             setCurrentSlide(response.data.current_slide)
           }
-          // Simulate connection
-          setTimeout(() => setIsConnected(true), 1000)
+          // Connect to WebSocket after session is loaded
+          wsConnect()
+
+          // If slides aren't ready yet, start polling
+          if (!response.data.slide_contents || response.data.slide_contents.length === 0) {
+            setSlidesLoading(true)
+            pollForSlides()
+          }
         } else {
           setError(response.error?.message || 'Session not found')
         }
-      } catch (err) {
+      } catch {
         setError('Connection error')
       } finally {
         setLoading(false)
       }
     }
 
+    // Poll for slide_contents until they're available
+    async function pollForSlides() {
+      let attempts = 0
+      const maxAttempts = 30 // Poll for up to 30 seconds
+
+      const poll = async () => {
+        attempts++
+        try {
+          const response = await apiCall<SessionData>(`/api/session/${sessionId}`)
+          if (response.success && response.data) {
+            if (response.data.slide_contents && response.data.slide_contents.length > 0) {
+              // Slides are ready!
+              setSessionData(response.data)
+              setSlidesLoading(false)
+              if (pollIntervalRef.current) {
+                clearInterval(pollIntervalRef.current)
+                pollIntervalRef.current = null
+              }
+            } else if (attempts >= maxAttempts) {
+              // Give up after max attempts
+              setSlidesLoading(false)
+              if (pollIntervalRef.current) {
+                clearInterval(pollIntervalRef.current)
+                pollIntervalRef.current = null
+              }
+            }
+          }
+        } catch {
+          console.error('Error polling for slides')
+        }
+      }
+
+      pollIntervalRef.current = setInterval(poll, 1000)
+    }
+
     if (sessionId) {
       fetchSession()
     }
-  }, [sessionId])
+
+    // Cleanup polling on unmount
+    return () => {
+      if (pollIntervalRef.current) {
+        clearInterval(pollIntervalRef.current)
+      }
+    }
+  }, [sessionId, wsConnect])
 
   // Auto-scroll messages
   useEffect(() => {
@@ -366,13 +615,10 @@ export default function SessionPage() {
 
   const handleToggleMic = async () => {
     if (!isMicOn) {
-      try {
-        await navigator.mediaDevices.getUserMedia({ audio: true })
-        setIsMicOn(true)
-      } catch (err) {
-        console.error('Microphone permission denied')
-      }
+      await startRecording()
+      setIsMicOn(true)
     } else {
+      stopRecording()
       setIsMicOn(false)
     }
   }
@@ -386,11 +632,10 @@ export default function SessionPage() {
         if (videoRef.current) {
           videoRef.current.srcObject = stream
         }
-      } catch (err) {
+      } catch {
         console.error('Camera permission denied')
       }
     } else {
-      // Stop camera stream
       if (cameraStream) {
         cameraStream.getTracks().forEach(track => track.stop())
         setCameraStream(null)
@@ -406,14 +651,15 @@ export default function SessionPage() {
     }
   }, [cameraStream])
 
-  // Cleanup camera stream on unmount
+  // Cleanup on unmount
   useEffect(() => {
     return () => {
       if (cameraStream) {
         cameraStream.getTracks().forEach(track => track.stop())
       }
+      stopRecording()
     }
-  }, [cameraStream])
+  }, [cameraStream, stopRecording])
 
   const handleSendMessage = () => {
     if (!inputMessage.trim()) return
@@ -425,32 +671,48 @@ export default function SessionPage() {
       timestamp: new Date(),
     }
     setMessages((prev) => [...prev, newMessage])
-    setInputMessage('')
 
-    // Simulate investor response
-    setTimeout(() => {
-      const investorResponse: Message = {
-        id: (Date.now() + 1).toString(),
-        role: 'investor',
-        content: 'Interesting point. What do you think about the scalability of this approach?',
-        timestamp: new Date(),
-        investor_name: 'VC Panel',
-      }
-      setMessages((prev) => [...prev, investorResponse])
-    }, 2000)
+    // Send answer to backend
+    if (isConnected) {
+      wsSend('answer_complete', { answer: inputMessage, duration: 0 })
+    }
+
+    setInputMessage('')
   }
 
-  const handleStartPitch = () => {
+  const handleStartPitch = async () => {
     setIsTimerRunning(true)
     setCurrentPhase('pitch')
+    // Start microphone recording when pitch starts
+    if (!isMicOn) {
+      await startRecording()
+      setIsMicOn(true)
+    }
   }
 
   const handleEndPitch = () => {
     setIsTimerRunning(false)
+    // Stop microphone recording
+    if (isMicOn) {
+      stopRecording()
+      setIsMicOn(false)
+    }
+    // Send end_pitch event to backend
+    if (isConnected) {
+      wsSend('end_pitch', {})
+    }
     setCurrentPhase('qa')
+    // Start Q&A
+    if (isConnected) {
+      wsSend('start_qa', {})
+    }
   }
 
   const handleGoToCouncil = () => {
+    // Send start_council event to backend
+    if (isConnected) {
+      wsSend('start_council', {})
+    }
     router.push(`/council/${sessionId}`)
   }
 
@@ -484,12 +746,17 @@ export default function SessionPage() {
     )
   }
 
-  // Store'daki mode öncelikli (kullanıcı seçimi), sonra backend, sonra default
   const mode = investorMode || sessionData?.investor_mode || 'friendly'
   const overallScore = sessionData?.deck_analysis?.scores?.overall_score
-  const slides = sessionData?.slides || mockSlides
+  // Map slide_contents to slides format
+  const slides: SlideData[] = sessionData?.slide_contents?.length
+    ? sessionData.slide_contents.map((s: { slide_number: number; content?: string; image_base64?: string }) => ({
+        slide_number: s.slide_number,
+        content: s.content,
+        image_base64: s.image_base64,
+      }))
+    : mockSlides
   const totalSlides = slides.length
-  const phaseInfo = PHASE_LABELS[currentPhase]
 
   return (
     <main className="min-h-screen bg-canvas">
@@ -497,24 +764,37 @@ export default function SessionPage() {
       <header className="bg-white border-b border-neutral-200 px-4 py-3">
         <div className="max-w-7xl mx-auto flex items-center justify-between">
           <div className="flex items-center gap-4">
-            <Link
-              href="/upload"
-              className="text-neutral-custom-subdued hover:text-neutral-custom text-sm"
-            >
-              &larr; Exit
+            <Link href="/" className="flex items-center gap-2">
+              <Image src="/logo.png" alt="PitchDrill" width={32} height={32} className="w-8 h-8" />
+              <span className="text-lg font-bold text-neutral-custom hidden sm:block">
+                Pitch<span className="text-accent-custom">Drill</span>
+              </span>
             </Link>
-            <div className="h-6 w-px bg-neutral-200" />
-            <span className="text-sm font-medium text-neutral-custom">
-              Session: {sessionId?.slice(0, 8)}...
-            </span>
+            <div className="h-6 w-px bg-neutral-200 hidden sm:block" />
+            <nav className="hidden sm:flex items-center gap-4">
+              <Link href="/upload" className="text-sm text-neutral-custom-subdued hover:text-accent-custom">
+                New Pitch
+              </Link>
+              <Link href="/history" className="text-sm text-neutral-custom-subdued hover:text-accent-custom">
+                History
+              </Link>
+            </nav>
           </div>
 
           <div className="flex items-center gap-4">
             {/* Connection Status */}
-            <div className={`flex items-center gap-2 text-sm ${isConnected ? 'text-green-600' : 'text-red-500'}`}>
+            <div className={`flex items-center gap-2 text-sm ${isConnected ? 'text-green-600' : wsStatus === 'connecting' ? 'text-amber-500' : 'text-red-500'}`}>
               {isConnected ? <WifiIcon className="w-4 h-4" /> : <WifiOffIcon className="w-4 h-4" />}
-              {isConnected ? 'Connected' : 'Connecting...'}
+              {isConnected ? 'Connected' : wsStatus === 'connecting' ? 'Connecting...' : 'Disconnected'}
             </div>
+
+            {/* AI Speaking Indicator */}
+            {isAISpeaking && (
+              <div className="flex items-center gap-2 text-sm text-purple-600 animate-pulse">
+                <span className="w-2 h-2 bg-purple-600 rounded-full animate-ping" />
+                AI Speaking
+              </div>
+            )}
 
             {/* Mode Badge */}
             <span className="text-sm font-normal bg-accent-custom/10 text-accent-custom px-3 py-1 rounded-full">
@@ -564,9 +844,15 @@ export default function SessionPage() {
           <Card className="bg-white">
             <CardContent className="p-0">
               <div className="aspect-video bg-neutral-900 rounded-t-lg flex items-center justify-center relative">
-                {slides[currentSlide]?.image_url ? (
+                {slidesLoading ? (
+                  <div className="text-white text-center">
+                    <Spinner className="w-12 h-12 text-accent-custom mx-auto mb-4" />
+                    <div className="text-neutral-400">Loading slides...</div>
+                    <div className="text-xs text-neutral-500 mt-2">Analyzing your deck</div>
+                  </div>
+                ) : slides[currentSlide]?.image_base64 ? (
                   <img
-                    src={slides[currentSlide].image_url}
+                    src={`data:image/png;base64,${slides[currentSlide].image_base64}`}
                     alt={`Slide ${currentSlide + 1}`}
                     className="w-full h-full object-contain"
                   />
@@ -648,10 +934,10 @@ export default function SessionPage() {
                        isCameraOn ? 'Camera On' : 'Media Off'}
                     </div>
                     <div className="text-xs text-neutral-custom-subdued">
-                      {isMicOn || isCameraOn ? 'Click buttons to toggle' : 'Enable mic and camera to pitch'}
+                      {isMicOn ? 'Audio streaming to AI...' : 'Enable mic to pitch'}
                     </div>
                   </div>
-                  {isMicOn && <AudioVisualizer isActive={isMicOn} />}
+                  <AudioVisualizer level={audioLevel} isRecording={isMicOn} />
                 </div>
 
                 <div className="flex items-center gap-4">
@@ -670,7 +956,7 @@ export default function SessionPage() {
                   >
                     {isTimerRunning ? (
                       <span className="flex items-center gap-2">
-                        <PauseIcon className="w-4 h-4" /> End
+                        <PauseIcon className="w-4 h-4" /> End Pitch
                       </span>
                     ) : (
                       <span className="flex items-center gap-2">
@@ -682,6 +968,30 @@ export default function SessionPage() {
               </div>
             </CardContent>
           </Card>
+
+          {/* Realtime Notes Panel */}
+          {realtimeNotes.length > 0 && (
+            <Card className="bg-white">
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm flex items-center gap-2">
+                  <NoteIcon className="w-4 h-4" />
+                  AI Coaching Notes
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="p-4 pt-0">
+                <div className="space-y-2 max-h-40 overflow-y-auto">
+                  {realtimeNotes.map((note, index) => (
+                    <div
+                      key={index}
+                      className="text-sm p-2 bg-accent-custom/5 border-l-2 border-accent-custom rounded"
+                    >
+                      {note.note}
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          )}
 
           {/* Camera Preview */}
           {isCameraOn && (
@@ -704,30 +1014,6 @@ export default function SessionPage() {
                   <div className="absolute bottom-2 left-2 bg-black/50 text-white text-xs px-2 py-1 rounded">
                     You
                   </div>
-                </div>
-              </CardContent>
-            </Card>
-          )}
-
-          {/* Camera Off Placeholder */}
-          {!isCameraOn && (
-            <Card className="bg-white">
-              <CardHeader className="pb-2">
-                <CardTitle className="text-sm flex items-center gap-2">
-                  <VideoOffIcon className="w-4 h-4" />
-                  Camera Preview
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="p-4 pt-0">
-                <div className="aspect-video bg-neutral-100 rounded-lg flex flex-col items-center justify-center">
-                  <UserIcon className="w-12 h-12 text-neutral-400 mb-2" />
-                  <p className="text-sm text-neutral-500">Camera is off</p>
-                  <button
-                    onClick={handleToggleCamera}
-                    className="mt-2 text-xs text-accent-custom hover:underline"
-                  >
-                    Turn on camera
-                  </button>
                 </div>
               </CardContent>
             </Card>
@@ -811,7 +1097,7 @@ export default function SessionPage() {
               <div className="space-y-3">
                 {currentPhase === 'pitch' && (
                   <p className="text-sm text-neutral-custom-subdued text-center">
-                    Present your pitch. When time runs out, you'll move to Q&A.
+                    Present your pitch. When time runs out, you&apos;ll move to Q&A.
                   </p>
                 )}
                 {currentPhase === 'qa' && (

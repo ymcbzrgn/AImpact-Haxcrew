@@ -1,11 +1,13 @@
 'use client'
 
-import { useEffect, useState, useRef } from 'react'
+import { useEffect, useState, useRef, useCallback } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
+import Image from 'next/image'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { apiCall } from '@/lib/api'
+import { useWebSocket } from '@/hooks/useWebSocket'
 
 // Types
 interface VCCharacter {
@@ -309,8 +311,158 @@ export default function CouncilPage() {
   const [votes, setVotes] = useState<VoteData[]>([])
   const [currentSpeaker, setCurrentSpeaker] = useState<string | null>(null)
   const [isDiscussionComplete, setIsDiscussionComplete] = useState(false)
+  const [councilStarted, setCouncilStarted] = useState(false)
 
   const dialogEndRef = useRef<HTMLDivElement>(null)
+  const speakerTimeoutRef = useRef<NodeJS.Timeout | null>(null)
+
+  // WebSocket URL
+  const wsUrl = `${process.env.NEXT_PUBLIC_WS_URL || 'ws://localhost:8000'}/ws/${sessionId}`
+
+  // Map speaker names to VC character IDs
+  const mapSpeakerToCharacter = (speakerName: string): string => {
+    const nameMap: Record<string, string> = {
+      'Alex Chen': 'alex',
+      'Sarah Williams': 'sarah',
+      'Michael Park': 'michael',
+      'Elena Rodriguez': 'elena',
+      'David Kim': 'david',
+    }
+    return nameMap[speakerName] || speakerName.toLowerCase().replace(/\s+/g, '_')
+  }
+
+  // Handle WebSocket messages
+  const handleWebSocketMessage = useCallback((message: { type: string; payload: unknown; timestamp: number }) => {
+    console.log('Council WebSocket message:', message)
+    const data = message.payload as Record<string, unknown> || {}
+
+    switch (message.type) {
+      case 'connected':
+        console.log('Council WebSocket connected')
+        break
+
+      case 'council_started':
+        setCouncilStarted(true)
+        break
+
+      case 'council_message': {
+        const speakerName = data.speaker as string || 'VC'
+        const content = data.content as string || ''
+        const messageType = data.type as string || 'discussion'
+        const speakerId = mapSpeakerToCharacter(speakerName)
+        const character = VC_CHARACTERS.find((c) => c.id === speakerId)
+
+        // Set current speaker with animation
+        setCurrentSpeaker(speakerId)
+
+        // Clear previous timeout
+        if (speakerTimeoutRef.current) {
+          clearTimeout(speakerTimeoutRef.current)
+        }
+
+        // Add message to dialog
+        const newMessage: DialogMessage = {
+          id: Date.now().toString(),
+          speaker_id: speakerId,
+          speaker_name: character?.name || speakerName,
+          content: content,
+          timestamp: new Date(),
+          type: messageType as 'discussion' | 'question' | 'vote',
+        }
+        setDialog((prev) => [...prev, newMessage])
+
+        // If this is a vote, also add to votes list
+        if (messageType === 'vote' && data.decision) {
+          const voteDecision = data.decision as string
+          setVotes((prev) => {
+            if (prev.find(v => v.investor_id === speakerId)) return prev
+            return [...prev, {
+              investor_id: speakerId,
+              decision: voteDecision === 'invest' ? 'invest' : 'pass',
+              confidence: data.score as number || 50,
+              reasoning: content,
+            }]
+          })
+        }
+
+        // Clear speaker after 1 second (faster)
+        speakerTimeoutRef.current = setTimeout(() => setCurrentSpeaker(null), 1000)
+        break
+      }
+
+      case 'council_vote': {
+        const investorId = data.investor_id as string
+        const decision = data.decision as 'invest' | 'pass' | 'undecided'
+        const confidence = data.confidence as number || 70
+        const reasoning = data.reasoning as string
+
+        if (investorId) {
+          const speakerId = mapSpeakerToCharacter(investorId)
+          setVotes((prev) => {
+            // Don't add duplicate votes
+            if (prev.find(v => v.investor_id === speakerId)) return prev
+            return [...prev, {
+              investor_id: speakerId,
+              decision: decision,
+              confidence: confidence,
+              reasoning: reasoning,
+            }]
+          })
+        }
+        break
+      }
+
+      case 'council_result': {
+        // All votes are in, discussion is complete
+        const finalVotes = data.votes as VoteData[]
+
+        if (finalVotes && Array.isArray(finalVotes)) {
+          setVotes(finalVotes.map(v => ({
+            ...v,
+            investor_id: mapSpeakerToCharacter(v.investor_id),
+          })))
+        }
+
+        setIsDiscussionComplete(true)
+
+        // Navigate to verdict after 3 seconds
+        setTimeout(() => {
+          router.push(`/verdict/${sessionId}`)
+        }, 3000)
+        break
+      }
+
+      case 'council_complete':
+        setIsDiscussionComplete(true)
+        break
+
+      case 'error':
+        console.error('Council WebSocket error:', data.message)
+        setError(data.message || 'Connection error')
+        break
+
+      default:
+        console.log('Unknown council message type:', message.type)
+    }
+  }, [router, sessionId])
+
+  // WebSocket hook
+  const {
+    status: wsStatus,
+    send: wsSend,
+    connect: wsConnect,
+    isConnected
+  } = useWebSocket({
+    url: wsUrl,
+    onMessage: handleWebSocketMessage,
+    onConnect: () => console.log('Council WebSocket connected'),
+    onDisconnect: () => console.log('Council WebSocket disconnected'),
+    onError: (e) => console.error('Council WebSocket error:', e),
+    reconnect: true,
+    reconnectAttempts: 10,      // 5'ten 10'a çıkarıldı
+    reconnectInterval: 2000,    // 3000'den 2000ms'ye düşürüldü
+    heartbeatInterval: 15000,   // 30000'den 15000ms'ye düşürüldü (daha sık ping)
+  })
 
   // Fetch session data
   useEffect(() => {
@@ -322,7 +474,7 @@ export default function CouncilPage() {
         } else {
           setError(response.error?.message || 'Session not found')
         }
-      } catch (err) {
+      } catch {
         setError('Connection error')
       } finally {
         setLoading(false)
@@ -334,69 +486,29 @@ export default function CouncilPage() {
     }
   }, [sessionId])
 
-  // Simulate council discussion
+  // Connect WebSocket when session is loaded
   useEffect(() => {
-    if (loading || error) return
+    if (sessionData && !isConnected && wsStatus === 'disconnected') {
+      wsConnect()
+    }
+  }, [sessionData, isConnected, wsStatus, wsConnect])
 
-    const discussionScript: { speakerId: string; content: string; delay: number; type: 'discussion' | 'question' | 'vote' }[] = [
-      { speakerId: 'sarah', content: 'This pitch looks interesting. What do you think about the market size?', delay: 1000, type: 'discussion' },
-      { speakerId: 'alex', content: 'Looking at TAM, we see a $2.5B market. However, the SAM calculation seems a bit aggressive.', delay: 3000, type: 'discussion' },
-      { speakerId: 'michael', content: 'Technically there\'s scalability potential. Their choice of microservices architecture is a good sign.', delay: 5000, type: 'discussion' },
-      { speakerId: 'elena', content: 'The team is experienced but I\'d like more detail on the operational side.', delay: 7000, type: 'discussion' },
-      { speakerId: 'david', content: 'Strong founder-market fit. The founders\' industry background is reassuring.', delay: 9000, type: 'discussion' },
-      { speakerId: 'sarah', content: 'I\'m voting INVEST. Solid thesis for early stage.', delay: 12000, type: 'vote' },
-      { speakerId: 'alex', content: 'Seeing the metrics, I say INVEST but we should be careful.', delay: 14000, type: 'vote' },
-      { speakerId: 'michael', content: 'INVEST for the technical vision.', delay: 16000, type: 'vote' },
-      { speakerId: 'elena', content: 'Considering operational risks, I\'m saying PASS this round.', delay: 18000, type: 'vote' },
-      { speakerId: 'david', content: 'I trust the founder. INVEST.', delay: 20000, type: 'vote' },
-    ]
+  // Start council discussion when connected
+  useEffect(() => {
+    if (isConnected && !councilStarted && !loading) {
+      wsSend('start_council', {})
+      setCouncilStarted(true)
+    }
+  }, [isConnected, councilStarted, loading, wsSend])
 
-    let messageIndex = 0
-    const interval = setInterval(() => {
-      if (messageIndex >= discussionScript.length) {
-        setIsDiscussionComplete(true)
-        clearInterval(interval)
-        return
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      if (speakerTimeoutRef.current) {
+        clearTimeout(speakerTimeoutRef.current)
       }
-
-      const script = discussionScript[messageIndex]
-      const character = VC_CHARACTERS.find((c) => c.id === script.speakerId)
-
-      // Set current speaker
-      setCurrentSpeaker(script.speakerId)
-
-      // Add message
-      const newMessage: DialogMessage = {
-        id: Date.now().toString(),
-        speaker_id: script.speakerId,
-        speaker_name: character?.name || 'Unknown',
-        content: script.content,
-        timestamp: new Date(),
-        type: script.type,
-      }
-      setDialog((prev) => [...prev, newMessage])
-
-      // Add vote if it's a vote message
-      if (script.type === 'vote') {
-        const isInvest = script.content.includes('INVEST')
-        setVotes((prev) => [
-          ...prev,
-          {
-            investor_id: script.speakerId,
-            decision: isInvest ? 'invest' : 'pass',
-            confidence: isInvest ? 75 : 60,
-          },
-        ])
-      }
-
-      // Clear speaker after a moment
-      setTimeout(() => setCurrentSpeaker(null), 1500)
-
-      messageIndex++
-    }, 2500)
-
-    return () => clearInterval(interval)
-  }, [loading, error])
+    }
+  }, [])
 
   // Auto-scroll dialog
   useEffect(() => {
@@ -439,19 +551,36 @@ export default function CouncilPage() {
       <header className="bg-white border-b border-neutral-200 px-4 py-3">
         <div className="max-w-7xl mx-auto flex items-center justify-between">
           <div className="flex items-center gap-4">
-            <Link
-              href={`/session/${sessionId}`}
-              className="text-neutral-custom-subdued hover:text-neutral-custom text-sm"
-            >
-              &larr; Back to Pitch Room
+            <Link href="/" className="flex items-center gap-2">
+              <Image src="/logo.png" alt="PitchDrill" width={32} height={32} className="w-8 h-8" />
+              <span className="text-lg font-bold text-neutral-custom hidden sm:block">
+                Pitch<span className="text-accent-custom">Drill</span>
+              </span>
             </Link>
-            <div className="h-6 w-px bg-neutral-200" />
-            <span className="text-lg font-bold text-neutral-custom">VC Council</span>
+            <div className="h-6 w-px bg-neutral-200 hidden sm:block" />
+            <nav className="hidden sm:flex items-center gap-4">
+              <Link href="/upload" className="text-sm text-neutral-custom-subdued hover:text-accent-custom">
+                New Pitch
+              </Link>
+              <Link href="/history" className="text-sm text-neutral-custom-subdued hover:text-accent-custom">
+                History
+              </Link>
+            </nav>
           </div>
 
-          <div className="flex items-center gap-2">
-            <span className="text-sm bg-purple-100 text-purple-700 px-3 py-1 rounded-full">
-              Discussion {isDiscussionComplete ? 'Complete' : 'In Progress'}
+          <div className="flex items-center gap-3">
+            {/* Connection Status */}
+            <div className={`flex items-center gap-2 text-sm ${isConnected ? 'text-green-600' : wsStatus === 'connecting' ? 'text-amber-500' : 'text-red-500'}`}>
+              <span className={`w-2 h-2 rounded-full ${isConnected ? 'bg-green-500' : wsStatus === 'connecting' ? 'bg-amber-500 animate-pulse' : 'bg-red-500'}`} />
+              {isConnected ? 'Connected' : wsStatus === 'connecting' ? 'Connecting...' : 'Disconnected'}
+            </div>
+            <span className="text-sm font-medium text-neutral-custom hidden sm:block">VC Council</span>
+            <span className={`text-sm px-3 py-1 rounded-full ${
+              isDiscussionComplete
+                ? 'bg-green-100 text-green-700'
+                : 'bg-purple-100 text-purple-700 animate-pulse'
+            }`}>
+              {isDiscussionComplete ? 'Complete' : 'In Progress'}
             </span>
           </div>
         </div>
