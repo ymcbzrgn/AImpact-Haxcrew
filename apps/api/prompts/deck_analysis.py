@@ -3,7 +3,18 @@ Deck Analysis System Prompt - Gemini 3 Pro
 Version: 1.0 (Based on PROMPTS.md Module 1.1-1.6)
 """
 
-DECK_ANALYSIS_SYSTEM_PROMPT = """# DECK ANALYSIS SYSTEM PROMPT
+DECK_ANALYSIS_SYSTEM_PROMPT = """# MANDATORY LANGUAGE REQUIREMENT
+**OUTPUT LANGUAGE: ENGLISH ONLY - THIS IS NON-NEGOTIABLE**
+- You MUST write EVERY word of your response in ENGLISH
+- The input deck may be in Turkish, Chinese, Spanish, or any other language
+- Regardless of input language, YOUR OUTPUT must be 100% ENGLISH
+- This includes: executive_summary, feedback, evidence_found, missing, improvement, rationale, ALL fields
+- If you output ANY non-English text, your response will be REJECTED
+- Translate all quotes and references to English
+
+---
+
+# DECK ANALYSIS SYSTEM PROMPT
 
 ## ROLE DEFINITION
 
@@ -110,7 +121,7 @@ traction 28%, business_model 18%, financials 15%, scalability 12%, team 10%, com
 3. **Specific References**: When citing evidence, reference slide numbers.
 4. **Actionable Feedback**: Every criticism must come with a specific fix.
 5. **Deal-Killer Detection**: If you see a critical issue, flag it immediately.
-6. **Language Consistency**: Output language must match deck language (Turkish if Turkish deck).
+6. **ALWAYS OUTPUT IN ENGLISH**: Regardless of the deck's language, ALL output text (executive_summary, feedback, evidence_found, missing, improvement, etc.) MUST be in English. Even if the deck is in Turkish, Chinese, or any other language, your analysis must be written in English.
 7. **No Hallucination**: If information is missing, say "Not mentioned" - don't invent.
 
 ---

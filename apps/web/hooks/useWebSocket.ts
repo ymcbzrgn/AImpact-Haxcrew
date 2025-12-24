@@ -61,7 +61,8 @@ export function useWebSocket({
     clearHeartbeat()
     heartbeatIntervalRef.current = setInterval(() => {
       if (wsRef.current?.readyState === WebSocket.OPEN) {
-        wsRef.current.send(JSON.stringify({ type: 'ping', timestamp: Date.now() }))
+        // Send in backend-expected format
+        wsRef.current.send(JSON.stringify({ event: 'ping', data: { timestamp: Date.now() } }))
       }
     }, heartbeatInterval)
   }, [clearHeartbeat, heartbeatInterval])
@@ -104,7 +105,13 @@ export function useWebSocket({
 
       wsRef.current.onmessage = (event) => {
         try {
-          const message: WebSocketMessage = JSON.parse(event.data)
+          const raw = JSON.parse(event.data)
+          // Backend sends { event, data } format, convert to { type, payload }
+          const message: WebSocketMessage = {
+            type: raw.event || raw.type,
+            payload: raw.data || raw.payload,
+            timestamp: raw.timestamp || Date.now(),
+          }
           setLastMessage(message)
           onMessage?.(message)
         } catch (e) {
@@ -145,10 +152,10 @@ export function useWebSocket({
 
   const send = useCallback((type: string, payload: unknown) => {
     if (wsRef.current?.readyState === WebSocket.OPEN) {
-      const message: WebSocketMessage = {
-        type,
-        payload,
-        timestamp: Date.now(),
+      // Send in backend-expected format: { event, data }
+      const message = {
+        event: type,
+        data: payload,
       }
       wsRef.current.send(JSON.stringify(message))
     } else {

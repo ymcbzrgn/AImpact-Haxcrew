@@ -16,7 +16,8 @@ from datetime import datetime
 
 
 async def extract_text_from_pdf(file_bytes: bytes) -> List[Dict]:
-    """Extract text from PDF file with enhanced OCR"""
+    """Extract text and images from PDF file with enhanced OCR"""
+    import base64
     slides = []
     doc = fitz.open(stream=file_bytes, filetype="pdf")
 
@@ -25,12 +26,18 @@ async def extract_text_from_pdf(file_bytes: bytes) -> List[Dict]:
 
         # Always try OCR for better accuracy, especially for image-heavy slides
         ocr_text = ""
+        image_base64 = ""
         try:
-            pix = page.get_pixmap(dpi=300)  # Higher DPI for better OCR
-            img = Image.open(io.BytesIO(pix.tobytes()))
+            pix = page.get_pixmap(dpi=150)  # 150 DPI for display
+            img_bytes = pix.tobytes("png")
+            image_base64 = base64.b64encode(img_bytes).decode('utf-8')
+
+            # OCR from higher res version
+            pix_ocr = page.get_pixmap(dpi=300)
+            img = Image.open(io.BytesIO(pix_ocr.tobytes()))
             ocr_text = pytesseract.image_to_string(img).strip()
         except Exception as e:
-            print(f"[PDF] OCR failed for page {page_num + 1}: {e}")
+            print(f"[PDF] Image/OCR failed for page {page_num + 1}: {e}")
 
         # Merge text and OCR results intelligently
         combined_text = _merge_text_and_ocr(text, ocr_text)
@@ -39,7 +46,8 @@ async def extract_text_from_pdf(file_bytes: bytes) -> List[Dict]:
             "slide_number": page_num + 1,
             "content": combined_text,
             "text_source": "pdf" if text.strip() else "ocr",
-            "has_ocr": bool(ocr_text)
+            "has_ocr": bool(ocr_text),
+            "image_base64": image_base64  # Base64 encoded PNG image
         })
 
     doc.close()
@@ -226,21 +234,35 @@ async def analyze_deck(
         for s in slides
     ])
 
-    # Detect language (simple heuristic)
+    # Detect deck language (for reference only - output is ALWAYS in English)
     deck_text = " ".join([s["content"] for s in slides])
     turkish_chars = set("şŞğĞüÜöÖçÇıİ")
     is_turkish = any(char in deck_text for char in turkish_chars)
     deck_language = "tr" if is_turkish else "en"
 
-    # Build metadata
+    # Build metadata - output_language is ALWAYS English regardless of deck language
     metadata = {
         "slide_count": len(slides),
         "file_format": "PDF",  # Default, can be updated
-        "language": deck_language,
+        "deck_language": deck_language,  # Language of the deck content
+        "output_language": "en",  # ALWAYS output analysis in English
         "feedback_tone": feedback_tone
     }
 
-    prompt = f"""<deck_metadata>
+    prompt = f"""# ABSOLUTE REQUIREMENT: RESPOND IN ENGLISH ONLY
+
+⚠️ CRITICAL: YOUR ENTIRE RESPONSE MUST BE IN ENGLISH ⚠️
+
+Even though the deck content below is in {deck_language.upper()} ({"Turkish" if is_turkish else "non-English"}), YOU MUST:
+- Write ALL text in ENGLISH
+- Translate any quotes from the deck to English
+- Use English for: executive_summary, feedback, evidence_found, missing, improvement, rationale - EVERY field
+
+DO NOT write in Turkish or any other language. English ONLY.
+
+---
+
+<deck_metadata>
 {json.dumps(metadata, ensure_ascii=False)}
 </deck_metadata>
 
@@ -248,7 +270,14 @@ async def analyze_deck(
 {slides_text}
 </slides>
 
-Analyze this pitch deck following all rules and output the complete JSON analysis."""
+---
+
+⚠️ FINAL REMINDER: OUTPUT LANGUAGE = ENGLISH ⚠️
+- If the deck says "Müşteri" → You write "Customer"
+- If the deck says "Pazar" → You write "Market"
+- Translate EVERYTHING to English in your JSON output.
+
+Now analyze this deck and respond with a JSON object in ENGLISH ONLY:"""
 
     # Call Gemini 3 Pro for high-quality analysis
     response = await generate_text_pro(prompt, DECK_ANALYSIS_SYSTEM_PROMPT)

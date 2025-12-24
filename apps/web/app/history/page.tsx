@@ -3,7 +3,6 @@
 import Link from 'next/link'
 import { useSessionStore, SessionHistoryItem } from '@/stores/session'
 import { Button } from '@/components/ui/button'
-import { Breadcrumb } from '@/components/breadcrumb'
 import { ConfirmDialog } from '@/components/ui/dialog'
 import { useState } from 'react'
 import { toast } from '@/stores/toast'
@@ -201,15 +200,14 @@ export default function HistoryPage() {
 
   return (
     <div className="min-h-screen bg-canvas">
-      {/* Header Section */}
+      {/* Page Header Section */}
       <div className="bg-white border-b border-neutral-200">
         <div className="max-w-4xl mx-auto px-4 sm:px-6 py-6">
-          <Breadcrumb />
-          <div className="flex items-center justify-between mt-4">
+          <div className="flex items-center justify-between">
             <div>
-              <h1 className="text-2xl font-bold text-neutral-custom">History</h1>
+              <h1 className="text-2xl font-bold text-neutral-custom">Session History</h1>
               <p className="text-neutral-custom-subdued">
-                Your completed pitch sessions
+                Track your progress and review past pitches
               </p>
             </div>
             {history.length > 0 && (
@@ -220,7 +218,7 @@ export default function HistoryPage() {
                 className="text-red-600 border-red-200 hover:bg-red-50"
               >
                 <TrashIcon className="w-4 h-4 mr-2" />
-                Clear
+                Clear All
               </Button>
             )}
           </div>

@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
+import Image from 'next/image'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { apiCall } from '@/lib/api'
@@ -358,72 +359,106 @@ export default function VerdictPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
-  // Fetch session and generate verdict
+  // Helper function to generate fallback verdict from deck analysis
+  const generateFallbackVerdict = (session: SessionData): VerdictData => {
+    const overallScore = session.deck_analysis?.scores?.overall_score || 65
+    const isInvest = overallScore >= 65
+
+    // Map category scores from deck_analysis if available
+    const categoryNames = ['problem', 'solution', 'market', 'traction', 'team', 'financials', 'business_model']
+    const categoryScores: CategoryScore[] = categoryNames.map(name => {
+      const categoryData = session.deck_analysis?.categories?.[name]
+      const score = categoryData?.score || Math.min(100, overallScore + Math.floor(Math.random() * 20) - 10)
+      return {
+        name: name.charAt(0).toUpperCase() + name.slice(1).replace('_', ' '),
+        score: score,
+        feedback: `Based on deck analysis for ${name}.`,
+      }
+    })
+
+    return {
+      session_id: sessionId,
+      decision: isInvest ? 'invest' : 'pass',
+      final_score: overallScore,
+      confidence: isInvest ? 78 : 65,
+      investor_votes: {
+        invest: isInvest ? 4 : 1,
+        pass: isInvest ? 1 : 4,
+      },
+      term_sheet: isInvest ? {
+        valuation: '$5M Pre-money',
+        investment_amount: '$500K',
+        equity_percentage: '10%',
+        board_seats: 1,
+        special_terms: [
+          'Pro-rata rights',
+          'Information rights',
+          '4-year vesting with 12-month cliff',
+        ],
+      } : undefined,
+      category_scores: categoryScores,
+      feedback: [
+        { category: 'Problem', type: 'strength', content: 'Clearly identified the pain point of the target audience.' },
+        { category: 'Solution', type: 'strength', content: 'Solid technical foundation with scalable architecture.' },
+        { category: 'Market', type: 'strength', content: 'TAM calculation is realistic and well-researched.' },
+        { category: 'Traction', type: 'weakness', content: 'Could share more user metrics and engagement data.' },
+        { category: 'Team', type: 'weakness', content: 'Could benefit from someone with sales/marketing experience.' },
+        { category: 'Financials', type: 'suggestion', content: 'Consider detailing CAC/LTV calculations.' },
+      ],
+      investor_pool_eligible: isInvest && overallScore >= 75,
+    }
+  }
+
+  // Fetch session and verdict from backend
   useEffect(() => {
     async function fetchData() {
       try {
-        const response = await apiCall<SessionData>(`/api/session/${sessionId}`)
-        if (response.success && response.data) {
-          setSessionData(response.data)
+        // First, try to fetch verdict directly from backend
+        const verdictResponse = await apiCall<VerdictData>(`/api/session/${sessionId}/verdict`)
 
-          // Generate mock verdict based on session data
-          const overallScore = response.data.deck_analysis?.scores?.overall_score || 75
-          const isInvest = overallScore >= 65
+        if (verdictResponse.success && verdictResponse.data) {
+          // Use backend verdict data
+          setVerdictData(verdictResponse.data)
 
-          const mockVerdict: VerdictData = {
-            session_id: sessionId,
-            decision: isInvest ? 'invest' : 'pass',
-            final_score: overallScore,
-            confidence: isInvest ? 78 : 65,
-            investor_votes: {
-              invest: isInvest ? 4 : 1,
-              pass: isInvest ? 1 : 4,
-            },
-            term_sheet: isInvest ? {
-              valuation: '$5M Pre-money',
-              investment_amount: '$500K',
-              equity_percentage: '10%',
-              board_seats: 1,
-              special_terms: [
-                'Pro-rata rights',
-                'Information rights',
-                '4-year vesting with 12-month cliff',
-              ],
-            } : undefined,
-            category_scores: [
-              { name: 'Problem', score: Math.min(100, overallScore + Math.floor(Math.random() * 20) - 10), feedback: 'Problem definition is clear and compelling.' },
-              { name: 'Solution', score: Math.min(100, overallScore + Math.floor(Math.random() * 20) - 10), feedback: 'Solution approach is innovative.' },
-              { name: 'Market', score: Math.min(100, overallScore + Math.floor(Math.random() * 20) - 10), feedback: 'Market size is large and growing.' },
-              { name: 'Traction', score: Math.min(100, overallScore + Math.floor(Math.random() * 20) - 10), feedback: 'Acceptable metrics for early stage.' },
-              { name: 'Team', score: Math.min(100, overallScore + Math.floor(Math.random() * 20) - 10), feedback: 'Experienced and complementary team.' },
-              { name: 'Financials', score: Math.min(100, overallScore + Math.floor(Math.random() * 20) - 10), feedback: 'Financial projections are reasonable.' },
-              { name: 'Ask', score: Math.min(100, overallScore + Math.floor(Math.random() * 20) - 10), feedback: 'Investment ask aligns with market standards.' },
-            ],
-            feedback: [
-              { category: 'Problem', type: 'strength', content: 'Clearly identified the pain point of the target audience.' },
-              { category: 'Solution', type: 'strength', content: 'Solid technical foundation with scalable architecture.' },
-              { category: 'Market', type: 'strength', content: 'TAM calculation is realistic and well-researched.' },
-              { category: 'Traction', type: 'weakness', content: 'Could share more user metrics and engagement data.' },
-              { category: 'Team', type: 'weakness', content: 'Could benefit from someone with sales/marketing experience.' },
-              { category: 'Financials', type: 'suggestion', content: 'Consider detailing CAC/LTV calculations.' },
-              { category: 'Ask', type: 'suggestion', content: 'A milestone-based investment model could be considered.' },
-            ],
-            investor_pool_eligible: isInvest && overallScore >= 75,
+          // Also fetch session for additional info
+          const sessionResponse = await apiCall<SessionData>(`/api/session/${sessionId}`)
+          if (sessionResponse.success && sessionResponse.data) {
+            setSessionData(sessionResponse.data)
           }
-
-          setVerdictData(mockVerdict)
 
           // Save to history
           addToHistory({
             id: sessionId,
             date: new Date().toISOString(),
-            investorMode: (investorMode || response.data.investor_mode || 'friendly') as 'shark' | 'friendly' | 'analyst',
-            score: overallScore,
-            decision: isInvest ? 'invest' : 'pass',
+            investorMode: (investorMode || verdictResponse.data.session_id || 'friendly') as 'shark' | 'friendly' | 'analyst',
+            score: verdictResponse.data.final_score,
+            decision: verdictResponse.data.decision,
             deckName: deckName || undefined,
           })
         } else {
-          setError(response.error?.message || 'Session not found')
+          // Fallback: fetch session and generate verdict locally
+          const sessionResponse = await apiCall<SessionData>(`/api/session/${sessionId}`)
+
+          if (sessionResponse.success && sessionResponse.data) {
+            setSessionData(sessionResponse.data)
+
+            // Generate fallback verdict from deck analysis
+            const fallbackVerdict = generateFallbackVerdict(sessionResponse.data)
+            setVerdictData(fallbackVerdict)
+
+            // Save to history
+            const overallScore = sessionResponse.data.deck_analysis?.scores?.overall_score || 65
+            addToHistory({
+              id: sessionId,
+              date: new Date().toISOString(),
+              investorMode: (investorMode || sessionResponse.data.investor_mode || 'friendly') as 'shark' | 'friendly' | 'analyst',
+              score: overallScore,
+              decision: overallScore >= 65 ? 'invest' : 'pass',
+              deckName: deckName || undefined,
+            })
+          } else {
+            setError(sessionResponse.error?.message || 'Session not found')
+          }
         }
       } catch (err) {
         setError('Connection error')
@@ -506,14 +541,21 @@ export default function VerdictPage() {
       <header className="bg-white border-b border-neutral-200 px-4 py-3">
         <div className="max-w-7xl mx-auto flex items-center justify-between">
           <div className="flex items-center gap-4">
-            <Link
-              href={`/council/${sessionId}`}
-              className="text-neutral-custom-subdued hover:text-neutral-custom text-sm"
-            >
-              &larr; Back to Council
+            <Link href="/" className="flex items-center gap-2">
+              <Image src="/logo.png" alt="PitchDrill" width={32} height={32} className="w-8 h-8" />
+              <span className="text-lg font-bold text-neutral-custom hidden sm:block">
+                Pitch<span className="text-accent-custom">Drill</span>
+              </span>
             </Link>
-            <div className="h-6 w-px bg-neutral-200" />
-            <span className="text-lg font-bold text-neutral-custom">Result</span>
+            <div className="h-6 w-px bg-neutral-200 hidden sm:block" />
+            <nav className="hidden sm:flex items-center gap-4">
+              <Link href="/upload" className="text-sm text-neutral-custom-subdued hover:text-accent-custom">
+                New Pitch
+              </Link>
+              <Link href="/history" className="text-sm text-neutral-custom-subdued hover:text-accent-custom">
+                History
+              </Link>
+            </nav>
           </div>
 
           <div className="flex items-center gap-2">
@@ -523,7 +565,7 @@ export default function VerdictPage() {
             </Button>
             <Button variant="outline" size="sm" onClick={handleExport}>
               <DownloadIcon className="w-4 h-4 mr-2" />
-              Download
+              Export
             </Button>
           </div>
         </div>

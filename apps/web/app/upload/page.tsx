@@ -2,13 +2,14 @@
 
 import { useState, useRef, useCallback } from 'react'
 import Link from 'next/link'
+import Image from 'next/image'
 import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardContent } from '@/components/ui/card'
 import { useSessionStore, InvestorMode } from '@/stores/session'
 import { apiCall, uploadFile } from '@/lib/api'
 
-// File type icons as SVG components
+// Icons
 function PdfIcon({ className }: { className?: string }) {
   return (
     <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -64,7 +65,6 @@ function Spinner({ className }: { className?: string }) {
   )
 }
 
-// Mode card icons
 function SharkIcon({ className }: { className?: string }) {
   return (
     <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -95,6 +95,30 @@ function AnalystIcon({ className }: { className?: string }) {
   )
 }
 
+function CheckIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+      <path d="M20 6L9 17l-5-5" />
+    </svg>
+  )
+}
+
+function ArrowLeftIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+      <path d="M19 12H5M12 19l-7-7 7-7" />
+    </svg>
+  )
+}
+
+function ArrowRightIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+      <path d="M5 12h14M12 5l7 7-7 7" />
+    </svg>
+  )
+}
+
 // Types
 interface DeckAnalysis {
   scores: {
@@ -112,7 +136,6 @@ interface DeckAnalysis {
   weaknesses?: string[]
 }
 
-// Backend response type
 interface BackendAnalysis {
   scores?: {
     overall_score?: number
@@ -127,13 +150,11 @@ interface BackendAnalysis {
   executive_summary?: string
 }
 
-// Transform backend analysis to frontend format
 function transformAnalysis(backendData: BackendAnalysis | null): DeckAnalysis | null {
   if (!backendData) return null
 
   const categories = backendData.categories || {}
 
-  // Extract scores from categories
   const scores = {
     problem: categories.problem?.score || 0,
     solution: categories.solution?.score || 0,
@@ -144,7 +165,6 @@ function transformAnalysis(backendData: BackendAnalysis | null): DeckAnalysis | 
     ask: categories.business_model?.score || categories.scalability?.score || 0,
   }
 
-  // Collect all strengths and weaknesses
   const allStrengths: string[] = []
   const allWeaknesses: string[] = []
 
@@ -157,8 +177,8 @@ function transformAnalysis(backendData: BackendAnalysis | null): DeckAnalysis | 
     scores,
     overallScore: backendData.scores?.overall_score || 0,
     summary: backendData.executive_summary || 'Analysis complete',
-    strengths: allStrengths.slice(0, 5), // Top 5
-    weaknesses: allWeaknesses.slice(0, 5), // Top 5
+    strengths: allStrengths.slice(0, 5),
+    weaknesses: allWeaknesses.slice(0, 5),
   }
 }
 
@@ -173,26 +193,29 @@ const ACCEPTED_TYPES = [
   'image/jpg',
 ]
 
-const MAX_FILE_SIZE = 50 * 1024 * 1024 // 50MB
+const MAX_FILE_SIZE = 50 * 1024 * 1024
 
-const INVESTOR_MODES: { mode: InvestorMode; title: string; description: string; icon: typeof SharkIcon }[] = [
+const INVESTOR_MODES: { mode: InvestorMode; title: string; description: string; icon: typeof SharkIcon; color: string }[] = [
   {
     mode: 'shark',
     title: 'Shark Mode',
     description: 'Tough questions and stress test. Closest to real VC experience.',
     icon: SharkIcon,
+    color: 'red',
   },
   {
     mode: 'friendly',
     title: 'Friendly Mode',
     description: 'Constructive feedback and supportive approach. Ideal for first-time pitchers.',
     icon: FriendlyIcon,
+    color: 'green',
   },
   {
     mode: 'analyst',
     title: 'Analyst Mode',
     description: 'Data-driven detailed analysis. Focuses on metrics and financials.',
     icon: AnalystIcon,
+    color: 'blue',
   },
 ]
 
@@ -225,11 +248,17 @@ function getScoreColor(score: number): string {
   return 'bg-red-500'
 }
 
+function getScoreTextColor(score: number): string {
+  if (score >= 70) return 'text-green-600'
+  if (score >= 40) return 'text-yellow-600'
+  return 'text-red-600'
+}
+
 export default function UploadPage() {
   const router = useRouter()
   const fileInputRef = useRef<HTMLInputElement>(null)
 
-  const { setSessionId, setDeckAnalysis, setInvestorMode, investorMode } = useSessionStore()
+  const { setSessionId, setDeckAnalysis, setInvestorMode } = useSessionStore()
 
   const [file, setFile] = useState<File | null>(null)
   const [isDragging, setIsDragging] = useState(false)
@@ -263,7 +292,6 @@ export default function UploadPage() {
     setUploadProgress(0)
 
     try {
-      // Step 1: Create session
       const sessionResponse = await apiCall<{ session_id: string }>('/api/session', {
         method: 'POST',
       })
@@ -276,12 +304,10 @@ export default function UploadPage() {
       setLocalSessionId(newSessionId)
       setSessionId(newSessionId)
 
-      // Simulate progress for better UX
       const progressInterval = setInterval(() => {
         setUploadProgress((prev) => Math.min(prev + 10, 90))
       }, 200)
 
-      // Step 2: Upload file
       const uploadResponse = await uploadFile(`/api/session/${newSessionId}/upload`, selectedFile)
 
       clearInterval(progressInterval)
@@ -291,19 +317,16 @@ export default function UploadPage() {
         throw new Error(uploadResponse.error?.message || 'Failed to upload file')
       }
 
-      // Step 3: Wait for analysis
       setUploadStatus('analyzing')
 
-      // Poll for analysis result
       let attempts = 0
-      const maxAttempts = 60 // 60 seconds max (analysis can take time)
+      const maxAttempts = 60
 
       const pollAnalysis = async (): Promise<DeckAnalysis> => {
         const response = await apiCall<{ status: string; deck_analysis: BackendAnalysis }>(
           `/api/session/${newSessionId}`
         )
 
-        // Check if analysis is ready
         if (response.success && response.data?.deck_analysis) {
           const transformed = transformAnalysis(response.data.deck_analysis)
           if (transformed) {
@@ -311,7 +334,6 @@ export default function UploadPage() {
           }
         }
 
-        // Check if still processing
         if (response.success && response.data?.status === 'processing') {
           if (attempts >= maxAttempts) {
             throw new Error('Analysis timed out')
@@ -321,7 +343,6 @@ export default function UploadPage() {
           return pollAnalysis()
         }
 
-        // Check for errors
         if (response.success && response.data?.status === 'analysis_failed') {
           throw new Error('Deck analysis failed')
         }
@@ -406,183 +427,332 @@ export default function UploadPage() {
   const FileIcon = file ? getFileIcon(file.type) : UploadIcon
 
   return (
-    <main className="min-h-screen bg-canvas py-8 px-4">
-      <div className="w-full max-w-4xl mx-auto">
-        <Link
-          href="/"
-          className="text-neutral-custom-subdued hover:text-neutral-custom text-sm mb-8 inline-block"
-        >
-          &larr; Home
-        </Link>
-
-        <h1 className="text-3xl font-bold text-neutral-custom mb-2">Upload Deck</h1>
-        <p className="text-neutral-custom-subdued mb-8">
-          Upload your pitch deck and get AI analysis
-        </p>
-
-        {/* Upload Area */}
-        {uploadStatus === 'idle' && (
-          <div
-            onDragOver={handleDragOver}
-            onDragLeave={handleDragLeave}
-            onDrop={handleDrop}
-            onClick={() => fileInputRef.current?.click()}
-            className={`
-              border-2 border-dashed rounded-xl p-12 text-center cursor-pointer
-              transition-all duration-200
-              ${isDragging
-                ? 'border-accent-custom bg-accent-custom/5'
-                : 'border-neutral-custom-subdued hover:border-accent-custom hover:bg-accent-custom/5'
+    <main className="min-h-screen bg-canvas">
+      <div className="max-w-5xl mx-auto px-6 py-8">
+        {/* Step Progress Indicator */}
+        <div className="max-w-3xl mx-auto mb-12">
+          <div className="flex items-center justify-between">
+            {[
+              { num: 1, label: 'Upload', active: uploadStatus === 'idle' || uploadStatus === 'uploading' || uploadStatus === 'error' },
+              { num: 2, label: 'Analyze', active: uploadStatus === 'analyzing' },
+              { num: 3, label: 'Select Mode', active: uploadStatus === 'complete' && !selectedMode },
+              { num: 4, label: 'Practice', active: uploadStatus === 'complete' && !!selectedMode },
+            ].map((step, index) => {
+              // Determine if step is completed
+              const getCompletedStep = () => {
+                if (uploadStatus === 'error' || uploadStatus === 'idle') return 0
+                if (uploadStatus === 'uploading') return 1
+                if (uploadStatus === 'analyzing') return 2
+                if (uploadStatus === 'complete') return 4
+                return 0
               }
-            `}
-          >
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept=".pdf,.pptx,.ppt,.png,.jpg,.jpeg"
-              onChange={handleFileSelect}
-              className="hidden"
-            />
-            <UploadIcon className="w-12 h-12 mx-auto mb-4 text-neutral-custom-subdued" />
-            <p className="text-neutral-custom font-medium mb-2">
-              Drag your file or click to select
-            </p>
-            <p className="text-neutral-custom-subdued text-sm">
-              PDF, PPTX, PNG, JPG - Max. 50MB
-            </p>
+              const completedStep = getCompletedStep()
+              const isCompleted = step.num < completedStep
+
+              return (
+                <div key={step.num} className="flex items-center flex-1">
+                  <div className="flex flex-col items-center">
+                    <div
+                      className={`w-10 h-10 rounded-full flex items-center justify-center font-bold text-sm transition-all ${
+                        step.active
+                          ? 'bg-accent-custom text-white shadow-lg shadow-accent-custom/30'
+                          : isCompleted
+                          ? 'bg-green-500 text-white'
+                          : 'bg-neutral-200 text-neutral-500'
+                      }`}
+                    >
+                      {isCompleted ? (
+                        <CheckIcon className="w-5 h-5" />
+                      ) : (
+                        step.num
+                      )}
+                    </div>
+                    <span className={`mt-2 text-xs font-medium ${step.active ? 'text-accent-custom' : 'text-neutral-custom-subdued'}`}>
+                      {step.label}
+                    </span>
+                  </div>
+                  {index < 3 && (
+                    <div className={`flex-1 h-1 mx-2 rounded ${
+                      isCompleted ? 'bg-green-500' : 'bg-neutral-200'
+                    }`} />
+                  )}
+                </div>
+              )
+            })}
+          </div>
+        </div>
+
+        {/* Page Header */}
+        <div className="text-center mb-12">
+          <h1 className="text-3xl md:text-4xl font-bold text-neutral-custom mb-3">
+            Upload Your Pitch Deck
+          </h1>
+          <p className="text-lg text-neutral-custom-subdued max-w-xl mx-auto">
+            Upload your deck and get instant AI analysis. Then choose your investor mode and start practicing.
+          </p>
+        </div>
+
+        {/* Upload Area - Only show when idle */}
+        {uploadStatus === 'idle' && (
+          <div className="max-w-2xl mx-auto">
+            <div
+              onDragOver={handleDragOver}
+              onDragLeave={handleDragLeave}
+              onDrop={handleDrop}
+              onClick={() => fileInputRef.current?.click()}
+              className={`
+                relative border-2 border-dashed rounded-3xl p-16 text-center cursor-pointer
+                transition-all duration-300 group
+                ${isDragging
+                  ? 'border-accent-custom bg-accent-custom/5 scale-[1.02]'
+                  : 'border-neutral-300 hover:border-accent-custom hover:bg-accent-custom/5'
+                }
+              `}
+            >
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept=".pdf,.pptx,.ppt,.png,.jpg,.jpeg"
+                onChange={handleFileSelect}
+                className="hidden"
+              />
+
+              {/* Upload Icon with Animation */}
+              <div className="w-20 h-20 mx-auto mb-6 rounded-2xl bg-accent-custom/10 flex items-center justify-center group-hover:scale-110 transition-transform">
+                <UploadIcon className="w-10 h-10 text-accent-custom" />
+              </div>
+
+              <h3 className="text-xl font-bold text-neutral-custom mb-2">
+                Drag & Drop Your Deck
+              </h3>
+              <p className="text-neutral-custom-subdued mb-6">
+                or click to browse your files
+              </p>
+
+              {/* File Types */}
+              <div className="flex items-center justify-center gap-4 text-sm text-neutral-custom-subdued">
+                <div className="flex items-center gap-1.5">
+                  <PdfIcon className="w-5 h-5" />
+                  PDF
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <PptxIcon className="w-5 h-5" />
+                  PPTX
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <ImageIcon className="w-5 h-5" />
+                  Images
+                </div>
+              </div>
+
+              <p className="text-xs text-neutral-400 mt-4">
+                Maximum file size: 50MB
+              </p>
+            </div>
+
+            {/* Tips Section */}
+            <div className="mt-8 p-6 bg-accent-custom/5 rounded-2xl border border-accent-custom/20">
+              <h3 className="font-semibold text-neutral-custom mb-4 flex items-center gap-2">
+                <svg className="w-5 h-5 text-accent-custom" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+                </svg>
+                Tips for a Great Pitch Deck
+              </h3>
+              <ul className="space-y-3 text-sm text-neutral-custom-subdued">
+                <li className="flex items-start gap-3">
+                  <span className="w-5 h-5 rounded-full bg-accent-custom/20 text-accent-custom flex items-center justify-center flex-shrink-0 text-xs font-bold">1</span>
+                  <span><strong className="text-neutral-custom">Keep it concise</strong> - 10-15 slides is ideal. Investors see hundreds of decks.</span>
+                </li>
+                <li className="flex items-start gap-3">
+                  <span className="w-5 h-5 rounded-full bg-accent-custom/20 text-accent-custom flex items-center justify-center flex-shrink-0 text-xs font-bold">2</span>
+                  <span><strong className="text-neutral-custom">Lead with the problem</strong> - Make investors feel the pain before presenting the solution.</span>
+                </li>
+                <li className="flex items-start gap-3">
+                  <span className="w-5 h-5 rounded-full bg-accent-custom/20 text-accent-custom flex items-center justify-center flex-shrink-0 text-xs font-bold">3</span>
+                  <span><strong className="text-neutral-custom">Show traction</strong> - Real numbers beat projections. Include metrics if you have them.</span>
+                </li>
+                <li className="flex items-start gap-3">
+                  <span className="w-5 h-5 rounded-full bg-accent-custom/20 text-accent-custom flex items-center justify-center flex-shrink-0 text-xs font-bold">4</span>
+                  <span><strong className="text-neutral-custom">Be clear on the ask</strong> - State how much you&apos;re raising and what you&apos;ll use it for.</span>
+                </li>
+              </ul>
+            </div>
           </div>
         )}
 
-        {/* File Selected - Uploading/Analyzing */}
-        {file && uploadStatus !== 'idle' && uploadStatus !== 'complete' && (
-          <Card className="bg-white">
-            <CardContent className="p-6">
-              <div className="flex items-center gap-4 mb-4">
-                <div className="w-12 h-12 rounded-lg bg-accent-custom/10 flex items-center justify-center">
-                  <FileIcon className="w-6 h-6 text-accent-custom" />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-neutral-custom font-medium truncate">{file.name}</p>
-                  <p className="text-neutral-custom-subdued text-sm">{formatFileSize(file.size)}</p>
-                </div>
-                {uploadStatus === 'uploading' || uploadStatus === 'analyzing' ? (
-                  <Spinner className="w-6 h-6 text-accent-custom" />
-                ) : null}
-              </div>
-
-              {/* Progress Bar */}
-              {uploadStatus === 'uploading' && (
-                <div className="space-y-2">
-                  <div className="flex justify-between text-sm">
-                    <span className="text-neutral-custom-subdued">Uploading...</span>
-                    <span className="text-neutral-custom">{uploadProgress}%</span>
+        {/* Uploading/Analyzing State */}
+        {file && (uploadStatus === 'uploading' || uploadStatus === 'analyzing') && (
+          <div className="max-w-2xl mx-auto">
+            <Card className="bg-white shadow-xl border-0 overflow-hidden">
+              <CardContent className="p-8">
+                {/* File Info */}
+                <div className="flex items-center gap-4 mb-8">
+                  <div className="w-14 h-14 rounded-2xl bg-accent-custom/10 flex items-center justify-center">
+                    <FileIcon className="w-7 h-7 text-accent-custom" />
                   </div>
-                  <div className="h-2 bg-neutral-100 rounded-full overflow-hidden">
-                    <div
-                      className="h-full bg-accent-custom transition-all duration-300"
-                      style={{ width: `${uploadProgress}%` }}
-                    />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-lg font-semibold text-neutral-custom truncate">{file.name}</p>
+                    <p className="text-neutral-custom-subdued">{formatFileSize(file.size)}</p>
                   </div>
+                  <Spinner className="w-8 h-8 text-accent-custom" />
                 </div>
-              )}
 
-              {uploadStatus === 'analyzing' && (
-                <div className="flex items-center gap-2 text-neutral-custom-subdued">
-                  <Spinner className="w-4 h-4" />
-                  <span>AI is analyzing your deck...</span>
-                </div>
-              )}
-            </CardContent>
-          </Card>
+                {/* Progress */}
+                {uploadStatus === 'uploading' && (
+                  <div className="space-y-3">
+                    <div className="flex justify-between text-sm font-medium">
+                      <span className="text-neutral-custom-subdued">Uploading...</span>
+                      <span className="text-accent-custom">{uploadProgress}%</span>
+                    </div>
+                    <div className="h-3 bg-neutral-100 rounded-full overflow-hidden">
+                      <div
+                        className="h-full bg-gradient-to-r from-accent-custom to-accent-custom-baseline transition-all duration-300"
+                        style={{ width: `${uploadProgress}%` }}
+                      />
+                    </div>
+                  </div>
+                )}
+
+                {uploadStatus === 'analyzing' && (
+                  <div className="text-center py-4">
+                    <div className="inline-flex items-center gap-3 text-accent-custom font-medium">
+                      <div className="w-3 h-3 bg-accent-custom rounded-full animate-pulse" />
+                      AI is analyzing your deck...
+                    </div>
+                    <p className="text-sm text-neutral-custom-subdued mt-2">
+                      This may take up to a minute
+                    </p>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </div>
         )}
 
         {/* Error State */}
-        {error && (
-          <Card className="bg-red-50 border-red-200">
-            <CardContent className="p-6">
-              <p className="text-red-600">{error}</p>
-              <Button
-                onClick={handleRemoveFile}
-                variant="outline"
-                className="mt-4"
-              >
-                Try Again
-              </Button>
-            </CardContent>
-          </Card>
+        {error && uploadStatus === 'error' && (
+          <div className="max-w-2xl mx-auto">
+            <Card className="bg-red-50 border-red-200">
+              <CardContent className="p-8 text-center">
+                <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-red-100 flex items-center justify-center">
+                  <svg className="w-8 h-8 text-red-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </div>
+                <h3 className="text-xl font-bold text-red-800 mb-2">Upload Failed</h3>
+                <p className="text-red-600 mb-6">{error}</p>
+                <Button
+                  onClick={handleRemoveFile}
+                  className="bg-red-600 hover:bg-red-700 text-white rounded-full px-8"
+                >
+                  Try Again
+                </Button>
+              </CardContent>
+            </Card>
+          </div>
         )}
 
         {/* Analysis Complete */}
         {uploadStatus === 'complete' && analysis && (
-          <div className="space-y-6">
-            {/* Overall Score Card */}
-            <Card className="bg-white">
-              <CardHeader>
-                <CardTitle className="text-neutral-custom">Deck Analysis Complete</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="flex items-center gap-8 mb-6">
-                  <div className="text-center">
-                    <div className="text-5xl font-bold text-accent-custom mb-1">
-                      {analysis.overallScore}
+          <div className="space-y-8">
+            {/* Analysis Card */}
+            <Card className="bg-white shadow-xl border-0 overflow-hidden">
+              <CardContent className="p-0">
+                {/* Header with Score */}
+                <div className="bg-gradient-to-r from-accent-custom to-accent-custom-baseline p-8 text-white">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-white/80 text-sm font-medium mb-1">OVERALL SCORE</p>
+                      <div className="flex items-baseline gap-2">
+                        <span className="text-6xl font-bold">{analysis.overallScore}</span>
+                        <span className="text-2xl text-white/60">/100</span>
+                      </div>
                     </div>
-                    <div className="text-neutral-custom-subdued text-sm">Overall Score</div>
-                  </div>
-                  <div className="flex-1">
-                    <p className="text-neutral-custom">{analysis.summary}</p>
+                    <div className="text-right">
+                      <div className="flex items-center gap-2 text-white/80 mb-2">
+                        <CheckIcon className="w-5 h-5" />
+                        Analysis Complete
+                      </div>
+                      {file && (
+                        <p className="text-sm text-white/60">{file.name}</p>
+                      )}
+                    </div>
                   </div>
                 </div>
 
-                {/* Score Visualization */}
-                <div className="space-y-3">
-                  {SCORE_CATEGORIES.map(({ key, label }) => {
-                    const score = analysis.scores[key]
-                    return (
-                      <div key={key} className="flex items-center gap-3">
-                        <div className="w-24 text-sm text-neutral-custom-subdued">{label}</div>
-                        <div className="flex-1 h-3 bg-neutral-100 rounded-full overflow-hidden">
-                          <div
-                            className={`h-full ${getScoreColor(score)} transition-all duration-500`}
-                            style={{ width: `${score}%` }}
-                          />
+                {/* Score Breakdown */}
+                <div className="p-8">
+                  <h3 className="text-lg font-bold text-neutral-custom mb-6">Category Scores</h3>
+                  <div className="grid md:grid-cols-2 gap-4">
+                    {SCORE_CATEGORIES.map(({ key, label }) => {
+                      const score = analysis.scores[key]
+                      return (
+                        <div key={key} className="flex items-center gap-4">
+                          <div className="w-24 text-sm font-medium text-neutral-custom">{label}</div>
+                          <div className="flex-1 h-3 bg-neutral-100 rounded-full overflow-hidden">
+                            <div
+                              className={`h-full ${getScoreColor(score)} transition-all duration-700`}
+                              style={{ width: `${score}%` }}
+                            />
+                          </div>
+                          <div className={`w-10 text-sm font-bold text-right ${getScoreTextColor(score)}`}>
+                            {score}
+                          </div>
                         </div>
-                        <div className="w-8 text-sm text-neutral-custom text-right">{score}</div>
-                      </div>
-                    )
-                  })}
-                </div>
-
-                {/* Strengths & Weaknesses */}
-                {(analysis.strengths || analysis.weaknesses) && (
-                  <div className="mt-6 grid grid-cols-2 gap-4">
-                    {analysis.strengths && analysis.strengths.length > 0 && (
-                      <div>
-                        <h4 className="text-sm font-medium text-green-600 mb-2">Strengths</h4>
-                        <ul className="text-sm text-neutral-custom-subdued space-y-1">
-                          {analysis.strengths.map((s, i) => (
-                            <li key={i}>+ {s}</li>
-                          ))}
-                        </ul>
-                      </div>
-                    )}
-                    {analysis.weaknesses && analysis.weaknesses.length > 0 && (
-                      <div>
-                        <h4 className="text-sm font-medium text-red-600 mb-2">Areas to Improve</h4>
-                        <ul className="text-sm text-neutral-custom-subdued space-y-1">
-                          {analysis.weaknesses.map((w, i) => (
-                            <li key={i}>- {w}</li>
-                          ))}
-                        </ul>
-                      </div>
-                    )}
+                      )
+                    })}
                   </div>
-                )}
 
-                {/* Remove file button */}
-                <div className="mt-6 pt-4 border-t">
+                  {/* Summary */}
+                  <div className="mt-8 p-6 bg-neutral-50 rounded-2xl">
+                    <h4 className="font-semibold text-neutral-custom mb-2">AI Summary</h4>
+                    <p className="text-neutral-custom-subdued">{analysis.summary}</p>
+                  </div>
+
+                  {/* Strengths & Weaknesses */}
+                  {(analysis.strengths?.length || analysis.weaknesses?.length) && (
+                    <div className="mt-6 grid md:grid-cols-2 gap-6">
+                      {analysis.strengths && analysis.strengths.length > 0 && (
+                        <div className="p-6 bg-green-50 rounded-2xl">
+                          <h4 className="font-semibold text-green-800 mb-3 flex items-center gap-2">
+                            <CheckIcon className="w-5 h-5" />
+                            Strengths
+                          </h4>
+                          <ul className="space-y-2">
+                            {analysis.strengths.map((s, i) => (
+                              <li key={i} className="text-sm text-green-700 flex items-start gap-2">
+                                <span className="text-green-500 mt-1">+</span>
+                                {s}
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+                      {analysis.weaknesses && analysis.weaknesses.length > 0 && (
+                        <div className="p-6 bg-amber-50 rounded-2xl">
+                          <h4 className="font-semibold text-amber-800 mb-3 flex items-center gap-2">
+                            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                            </svg>
+                            Areas to Improve
+                          </h4>
+                          <ul className="space-y-2">
+                            {analysis.weaknesses.map((w, i) => (
+                              <li key={i} className="text-sm text-amber-700 flex items-start gap-2">
+                                <span className="text-amber-500 mt-1">-</span>
+                                {w}
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Change File */}
                   <button
                     onClick={handleRemoveFile}
-                    className="text-sm text-neutral-custom-subdued hover:text-neutral-custom"
+                    className="mt-6 text-sm text-neutral-custom-subdued hover:text-accent-custom transition-colors"
                   >
                     Upload a different file
                   </button>
@@ -592,54 +762,79 @@ export default function UploadPage() {
 
             {/* Mode Selection */}
             <div>
-              <h2 className="text-xl font-semibold text-neutral-custom mb-4">
-                Select Investor Mode
+              <h2 className="text-2xl font-bold text-neutral-custom mb-2 text-center">
+                Choose Your Investor Mode
               </h2>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                {INVESTOR_MODES.map(({ mode, title, description, icon: Icon }) => (
+              <p className="text-neutral-custom-subdued text-center mb-8">
+                Select how tough you want your AI investors to be
+              </p>
+
+              <div className="grid md:grid-cols-3 gap-6">
+                {INVESTOR_MODES.map(({ mode, title, description, icon: Icon, color }) => (
                   <Card
                     key={mode}
                     onClick={() => handleModeSelect(mode)}
                     className={`
-                      cursor-pointer transition-all duration-200
+                      cursor-pointer transition-all duration-300 overflow-hidden
                       ${selectedMode === mode
-                        ? 'ring-2 ring-accent-custom bg-accent-custom/5'
-                        : 'hover:shadow-md hover:border-accent-custom/50'
+                        ? 'ring-2 ring-accent-custom shadow-xl scale-[1.02]'
+                        : 'hover:shadow-lg hover:scale-[1.01]'
                       }
                     `}
                   >
                     <CardContent className="p-6 text-center">
                       <div
                         className={`
-                          w-12 h-12 mx-auto mb-3 rounded-full flex items-center justify-center
-                          ${selectedMode === mode ? 'bg-accent-custom text-white' : 'bg-neutral-100 text-neutral-custom'}
+                          w-16 h-16 mx-auto mb-4 rounded-2xl flex items-center justify-center transition-colors
+                          ${selectedMode === mode
+                            ? 'bg-accent-custom text-white'
+                            : color === 'red'
+                              ? 'bg-red-100 text-red-600'
+                              : color === 'green'
+                                ? 'bg-green-100 text-green-600'
+                                : 'bg-blue-100 text-blue-600'
+                          }
                         `}
                       >
-                        <Icon className="w-6 h-6" />
+                        <Icon className="w-8 h-8" />
                       </div>
-                      <h3 className="font-semibold text-neutral-custom mb-2">{title}</h3>
+                      <h3 className="text-lg font-bold text-neutral-custom mb-2">{title}</h3>
                       <p className="text-sm text-neutral-custom-subdued">{description}</p>
+
+                      {selectedMode === mode && (
+                        <div className="mt-4 flex items-center justify-center gap-2 text-accent-custom font-medium">
+                          <CheckIcon className="w-5 h-5" />
+                          Selected
+                        </div>
+                      )}
                     </CardContent>
                   </Card>
                 ))}
               </div>
             </div>
 
-            {/* Start Session Button */}
-            <div className="flex justify-center pt-4">
+            {/* Start Button */}
+            <div className="text-center pt-4">
               <Button
                 onClick={handleStartSession}
                 disabled={!selectedMode}
+                size="lg"
                 className={`
-                  px-8 py-3 text-lg
+                  px-12 py-6 text-lg rounded-full transition-all duration-300
                   ${selectedMode
-                    ? 'bg-accent-custom hover:bg-accent-custom-baseline text-white'
+                    ? 'bg-accent-custom hover:bg-accent-custom-baseline text-white shadow-xl shadow-accent-custom/30 hover:shadow-2xl hover:scale-105'
                     : 'bg-neutral-200 text-neutral-400 cursor-not-allowed'
                   }
                 `}
               >
-                Start Pitch
+                Start Pitch Session
+                <ArrowRightIcon className="w-5 h-5 ml-2" />
               </Button>
+              {!selectedMode && (
+                <p className="text-sm text-neutral-custom-subdued mt-3">
+                  Select an investor mode to continue
+                </p>
+              )}
             </div>
           </div>
         )}

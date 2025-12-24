@@ -67,7 +67,7 @@ async def init_db():
         result = await conn.execute(text("SELECT extname FROM pg_extension"))
         extensions = [row[0] for row in result.fetchall()]
 
-        print(f"✅ Database connected successfully")
+        print(f"[OK] Database connected successfully")
         print(f"   Extensions: {', '.join(extensions)}")
 
         return True
@@ -84,4 +84,4 @@ async def close_db():
             pass  # Ignore cleanup errors
         engine = None
         async_session_maker = None
-        print("✅ Database connection closed")
+        print("[OK] Database connection closed")

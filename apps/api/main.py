@@ -7,7 +7,6 @@ import os
 # Load environment variables from .env file
 load_dotenv(dotenv_path=os.path.join(os.path.dirname(__file__), '.env'))
 
-from services.database import init_db, close_db
 from services.gemini_service import init_gemini
 
 
@@ -24,18 +23,12 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         print(f"[WARN] Gemini initialization failed: {e}")
 
-    # Initialize Database
-    try:
-        await init_db()
-    except Exception as e:
-        print(f"[WARN] Database connection failed: {e}")
-        print("   Continuing without database...")
+    print("[OK] Using in-memory storage for sessions")
 
     yield
 
     # Shutdown
     print("[STOP] Shutting down PitchDrill API...")
-    await close_db()
 
 
 app = FastAPI(
@@ -45,11 +38,18 @@ app = FastAPI(
     lifespan=lifespan
 )
 
-# CORS
+# CORS - Allow all localhost ports for development
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
         "http://localhost:3000",
+        "http://localhost:3001",
+        "http://localhost:3002",
+        "http://localhost:3003",
+        "http://127.0.0.1:3000",
+        "http://127.0.0.1:3001",
+        "http://127.0.0.1:3002",
+        "http://127.0.0.1:3003",
         "https://pitchdrill.vercel.app",
     ],
     allow_credentials=True,
