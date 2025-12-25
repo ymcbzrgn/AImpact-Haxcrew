@@ -15,22 +15,22 @@ GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 # Global client instance
 _client = None
 
-# Model Configuration - Using Latest Gemini Models
+# Model Configuration - Using Gemini 2.5 (Stable)
 MODELS = {
     # Text Generation - High Quality (Deck Analysis, Council)
-    "pro": "gemini-3-pro-preview",
+    "pro": "gemini-2.5-flash",  # 2.5 flash is fast and high quality
 
     # Text Generation - Fast (Realtime Notes, Quick responses)
-    "flash": "gemini-3-flash-preview",
+    "flash": "gemini-2.5-flash",
 
     # Vision - Image analysis
-    "vision": "gemini-3-pro-image-preview",
+    "vision": "gemini-2.5-flash",
 
     # Embeddings (RAG pipeline) - 768 dimensions
     "embedding": "text-embedding-004",
 
     # Live Audio (Real-time conversation)
-    "live": "gemini-2.5-flash-native-audio-latest",
+    "live": "gemini-2.0-flash-live-001",
 
     # Text-to-Speech
     "tts": "gemini-2.5-flash-preview-tts",
@@ -71,13 +71,19 @@ async def generate_text(
     client = get_client()
     model_name = MODELS.get(model_type, MODELS["flash"])
 
+    # Logging for debugging
+    print(f"[Gemini] Calling model: {model_name}")
+    print(f"[Gemini] Prompt length: {len(prompt)} chars")
+    if system_instruction:
+        print(f"[Gemini] System instruction: {len(system_instruction)} chars")
+
     config = None
     if system_instruction:
         config = types.GenerateContentConfig(
             system_instruction=system_instruction
         )
 
-    # Senkron çağrıyı thread pool'a taşı (event loop'u bloklamaz)
+    # Senkron cagiyi thread pool'a tasi (event loop'u bloklamaz)
     try:
         response = await asyncio.wait_for(
             asyncio.to_thread(
@@ -88,14 +94,19 @@ async def generate_text(
             ),
             timeout=timeout
         )
+        print(f"[Gemini] SUCCESS - Response length: {len(response.text)} chars")
         return response.text
     except asyncio.TimeoutError:
+        print(f"[Gemini] ERROR: Timeout after {timeout} seconds")
         raise Exception(f"Gemini API timeout after {timeout} seconds")
+    except Exception as e:
+        print(f"[Gemini] ERROR: {type(e).__name__}: {e}")
+        raise
 
 
 async def generate_text_pro(prompt: str, system_instruction: str = None) -> str:
-    """Generate high-quality text using Gemini Pro"""
-    return await generate_text(prompt, system_instruction, model_type="pro")
+    """Generate high-quality text using Gemini Pro - with 30 second timeout for faster response"""
+    return await generate_text(prompt, system_instruction, model_type="pro", timeout=30)
 
 
 async def generate_text_flash(prompt: str, system_instruction: str = None) -> str:

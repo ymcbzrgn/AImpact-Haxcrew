@@ -29,9 +29,7 @@ class QuickCouncilResult:
     recommendations: list[str]
 
 
-QUICK_COUNCIL_PROMPT = """You are a VC investment committee making a QUICK decision on a startup pitch.
-
-Based on the deck analysis below, provide a rapid assessment from 5 VCs.
+QUICK_COUNCIL_PROMPT = """You are 5 VCs making investment decisions. Analyze this pitch deck.
 
 DECK ANALYSIS:
 {deck_analysis}
@@ -39,38 +37,27 @@ DECK ANALYSIS:
 PITCH SUMMARY:
 {pitch_summary}
 
-Respond with ONLY valid JSON in this exact format:
+RULES:
+1. Use EXACTLY these 5 VC names - no others: Alex Chen, Sarah Williams, Michael Park, Elena Rodriguez, David Kim
+2. Each one_liner MUST reference specific content from THIS deck (product name, features, missing sections)
+3. key_strengths/key_weaknesses MUST mention actual deck content, not generic phrases
+4. Average startup deck scores 50-60. Be realistic.
+
+Return ONLY this JSON (no markdown):
 {{
   "votes": [
-    {{"name": "Alex Chen", "firm": "Growth Fund", "decision": "invest", "score": 72, "one_liner": "Strong PMF signals but weak unit economics"}},
-    {{"name": "Sarah Williams", "firm": "Strategic Capital", "decision": "pass", "score": 55, "one_liner": "Market too small for our thesis"}},
-    {{"name": "Michael Park", "firm": "Tech Ventures", "decision": "invest", "score": 68, "one_liner": "Founder shows grit, worth the bet"}},
-    {{"name": "Elena Rodriguez", "firm": "Operations Capital", "decision": "pass", "score": 45, "one_liner": "Unit economics don't scale"}},
-    {{"name": "David Kim", "firm": "Seed Fund", "decision": "invest", "score": 65, "one_liner": "Conditional yes with milestones"}}
+    {{"name": "Alex Chen", "firm": "Growth Fund", "decision": "invest", "score": 65, "one_liner": "<specific to this deck>"}},
+    {{"name": "Sarah Williams", "firm": "Strategic Capital", "decision": "pass", "score": 55, "one_liner": "<specific>"}},
+    {{"name": "Michael Park", "firm": "Tech Ventures", "decision": "invest", "score": 60, "one_liner": "<specific>"}},
+    {{"name": "Elena Rodriguez", "firm": "Operations Capital", "decision": "pass", "score": 50, "one_liner": "<specific>"}},
+    {{"name": "David Kim", "firm": "Seed Fund", "decision": "invest", "score": 58, "one_liner": "<specific>"}}
   ],
-  "final_decision": "conditional_invest",
-  "average_score": 61,
-  "key_strengths": [
-    "Clear problem-solution fit",
-    "Experienced technical team"
-  ],
-  "key_weaknesses": [
-    "Unclear go-to-market strategy",
-    "Limited traction data"
-  ],
-  "recommendations": [
-    "Focus on proving unit economics before next raise",
-    "Add a sales/BD co-founder",
-    "Get 10 paying customers before Series A"
-  ]
+  "final_decision": "pass",
+  "average_score": 57.6,
+  "key_strengths": ["<specific to deck>", "<specific>"],
+  "key_weaknesses": ["<specific to deck>", "<specific>"],
+  "recommendations": ["<specific action>", "<specific action>"]
 }}
-
-IMPORTANT:
-- Each VC gives a score 0-100 and decision (invest/pass)
-- final_decision can be: "strong_invest", "invest", "conditional_invest", "pass", "strong_pass"
-- Keep one_liner under 15 words
-- Be realistic and critical - average deck is 50-60 score
-- Output ONLY JSON, no markdown, no explanation
 """
 
 
@@ -127,7 +114,14 @@ Category Scores:
     )
 
     try:
+        print(f"[QuickCouncil] ========== STARTING COUNCIL ==========")
+        print(f"[QuickCouncil] Deck analysis present: {deck_analysis is not None}")
+        print(f"[QuickCouncil] Pitch transcript present: {pitch_transcript is not None}")
+        print(f"[QuickCouncil] Prompt length: {len(prompt)} chars")
+
         response = await generate_text_flash(prompt)
+
+        print(f"[QuickCouncil] Raw response (first 300 chars): {response[:300]}...")
 
         # Parse JSON
         # Clean response
@@ -187,16 +181,17 @@ Category Scores:
         )
 
     except asyncio.TimeoutError:
-        print(f"[QuickCouncil] API Timeout - using fallback votes")
+        print(f"[QuickCouncil] !!! TIMEOUT ERROR - Falling back to mock data")
         return await _send_fallback_votes(on_message, "API timeout - results based on deck analysis")
 
     except json.JSONDecodeError as e:
-        print(f"[QuickCouncil] JSON Parse Error: {e}")
+        print(f"[QuickCouncil] !!! JSON PARSE ERROR: {e}")
+        print(f"[QuickCouncil] Raw text that failed to parse: {text[:500] if 'text' in dir() else 'N/A'}")
         traceback.print_exc()
         return await _send_fallback_votes(on_message, "Response parsing error")
 
     except Exception as e:
-        print(f"[QuickCouncil] Unexpected Error: {e}")
+        print(f"[QuickCouncil] !!! UNEXPECTED ERROR: {type(e).__name__}: {e}")
         traceback.print_exc()
         return await _send_fallback_votes(on_message, f"System error: {str(e)[:50]}")
 

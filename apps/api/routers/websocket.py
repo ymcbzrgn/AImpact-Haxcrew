@@ -21,6 +21,14 @@ class ConnectionManager:
         self.active_connections: Dict[str, WebSocket] = {}
         self.realtime_notes: Dict[str, list] = {}
         self.session_states: Dict[str, dict] = {}
+        self.council_running: Dict[str, bool] = {}  # Track if council is running per session
+        self.council_locks: Dict[str, asyncio.Lock] = {}  # Per-session locks to prevent race conditions
+
+    def get_council_lock(self, session_id: str) -> asyncio.Lock:
+        """Get or create a lock for a session"""
+        if session_id not in self.council_locks:
+            self.council_locks[session_id] = asyncio.Lock()
+        return self.council_locks[session_id]
 
     async def connect(self, session_id: str, websocket: WebSocket):
         await websocket.accept()
@@ -41,6 +49,8 @@ class ConnectionManager:
                 })
             except Exception as e:
                 print(f"[WS] Error sending event {event}: {e}")
+        else:
+            print(f"[WS] Warning: No active connection for session {session_id[:8]} to send {event}")
 
     def add_note(self, session_id: str, note: dict):
         if session_id not in self.realtime_notes:
@@ -131,15 +141,40 @@ async def websocket_endpoint(websocket: WebSocket, session_id: str):
                     update_session_data(session_id, {"qa_transcript": qa_list})
 
             elif event == "start_council":
-                # Start council debate
-                print(f"[WS] Starting council for session {session_id}")
+                # Use lock to prevent race conditions
+                council_lock = manager.get_council_lock(session_id)
 
-                session = get_session_data(session_id)
-                if not session:
-                    await manager.send_event(session_id, "error", {"message": "Session not found"})
-                    continue
+                async with council_lock:
+                    print(f"[WS] start_council received for {session_id[:8]}, checking guards (locked)...")
 
-                update_session_data(session_id, {"status": "council"})
+                    # Guard 1: Check in-memory council_running flag
+                    if manager.council_running.get(session_id):
+                        print(f"[WS] BLOCKED: council_running flag is True for {session_id[:8]}")
+                        continue
+
+                    session = get_session_data(session_id)
+                    if not session:
+                        await manager.send_event(session_id, "error", {"message": "Session not found"})
+                        continue
+
+                    # Guard 2: Check session status
+                    if session.get("status") in ["council", "completed"]:
+                        print(f"[WS] BLOCKED: session status is '{session.get('status')}' for {session_id[:8]}")
+                        continue
+
+                    # Guard 3: Check if verdict already exists
+                    if session.get("verdict"):
+                        print(f"[WS] BLOCKED: Verdict already exists for {session_id[:8]}")
+                        await manager.send_event(session_id, "session_complete", {
+                            "final_score": session.get("final_score", 0),
+                            "decision": session.get("verdict", {}).get("decision", "pass")
+                        })
+                        continue
+
+                    # All guards passed - mark as running IMMEDIATELY (still inside lock)
+                    manager.council_running[session_id] = True
+                    update_session_data(session_id, {"status": "council"})
+                    print(f"[WS] PASSED: Starting council for session {session_id[:8]}")
                 await manager.send_event(session_id, "council_started", {})
                 await manager.send_event(session_id, "phase_change", {"phase": "council"})
 
@@ -197,8 +232,10 @@ async def run_council_discussion(session_id: str, session: dict, manager: Connec
         invest_count = sum(1 for v in result.votes if v.decision == "invest")
         pass_count = len(result.votes) - invest_count
 
-        # Normalize decision to 'invest' or 'pass'
-        normalized_decision = "invest" if "invest" in result.final_decision.lower() else "pass"
+        # Decision based on VOTE MAJORITY, not AI's final_decision
+        # 3+ invest votes out of 5 = INVEST
+        normalized_decision = "invest" if invest_count >= 3 else "pass"
+        print(f"[Council] Vote count: {invest_count} invest, {pass_count} pass -> {normalized_decision.upper()}")
 
         # Get category scores from deck analysis
         deck_analysis = session.get("deck_analysis", {})
@@ -212,14 +249,37 @@ async def run_council_discussion(session_id: str, session: dict, manager: Connec
                     "feedback": data.get("feedback", "")[:200] if data.get("feedback") else ""
                 })
 
-        # Build feedback from strengths and weaknesses
+        # Build feedback from deck analysis categories (category-specific)
         feedback = []
-        for strength in result.key_strengths:
-            feedback.append({"category": "General", "type": "strength", "content": strength})
-        for weakness in result.key_weaknesses:
-            feedback.append({"category": "General", "type": "weakness", "content": weakness})
-        for rec in result.recommendations:
-            feedback.append({"category": "General", "type": "suggestion", "content": rec})
+        for name, data in categories.items():
+            if isinstance(data, dict):
+                score = data.get("score", 50)
+                category_name = name.replace("_", " ").title()
+                feedback_text = data.get("feedback", "")
+
+                if score >= 70 and feedback_text:
+                    feedback.append({
+                        "category": category_name,
+                        "type": "strength",
+                        "content": feedback_text
+                    })
+                elif score < 40 and feedback_text:
+                    feedback.append({
+                        "category": category_name,
+                        "type": "weakness",
+                        "content": feedback_text
+                    })
+                elif score < 60 and feedback_text:
+                    feedback.append({
+                        "category": category_name,
+                        "type": "suggestion",
+                        "content": feedback_text
+                    })
+
+        # Add recommendations as suggestions if we don't have enough feedback
+        if len(feedback) < 3:
+            for rec in result.recommendations[:3]:
+                feedback.append({"category": "General", "type": "suggestion", "content": rec})
 
         # Build verdict data matching frontend VerdictData interface
         verdict_data = {
@@ -240,8 +300,44 @@ async def run_council_discussion(session_id: str, session: dict, manager: Connec
             "investor_pool_eligible": result.average_score >= 80,
             "key_strengths": result.key_strengths,
             "key_weaknesses": result.key_weaknesses,
-            "recommendations": result.recommendations
+            "recommendations": result.recommendations,
+            "term_sheet": None  # Will be populated below for INVEST decisions
         }
+
+        # Generate term sheet for INVEST decisions
+        if normalized_decision == "invest":
+            try:
+                from services.term_sheet_service import generate_term_sheet, extract_session_metadata
+                print(f"[Council] Generating term sheet for INVEST decision...")
+
+                metadata = extract_session_metadata(deck_analysis or {})
+                council_result_for_ts = {
+                    "decision": "INVEST",
+                    "average_score": result.average_score,
+                    "votes": {v.name: {"score": v.score, "decision": v.decision, "rationale": v.one_liner} for v in result.votes}
+                }
+
+                term_sheet_result = await generate_term_sheet(
+                    council_result=council_result_for_ts,
+                    deck_analysis=deck_analysis or {},
+                    language="en",
+                    startup_name=metadata.get("startup_name", "Startup"),
+                    stage=metadata.get("stage", "seed"),
+                    ask_amount=metadata.get("ask_amount", "$500K"),
+                    sector=metadata.get("sector", "other")
+                )
+
+                # Add term sheet to verdict data
+                if term_sheet_result and "term_sheet" in term_sheet_result:
+                    verdict_data["term_sheet"] = term_sheet_result["term_sheet"]
+                    print(f"[Council] Term sheet generated successfully")
+                else:
+                    print(f"[Council] Term sheet result missing 'term_sheet' key")
+
+            except Exception as e:
+                print(f"[Council] Term sheet generation error: {e}")
+                import traceback
+                traceback.print_exc()
 
         # Save to session
         update_session_data(session_id, {
@@ -251,6 +347,7 @@ async def run_council_discussion(session_id: str, session: dict, manager: Connec
         })
 
         # Send final result
+        print(f"[Council] Sending council_result event...")
         await manager.send_event(session_id, "council_result", {
             "decision": result.final_decision,
             "average_score": result.average_score,
@@ -259,11 +356,17 @@ async def run_council_discussion(session_id: str, session: dict, manager: Connec
             "key_weaknesses": result.key_weaknesses,
             "recommendations": result.recommendations
         })
+        print(f"[Council] council_result sent!")
 
+        print(f"[Council] Sending session_complete event...")
         await manager.send_event(session_id, "session_complete", {
             "final_score": int(result.average_score),
             "decision": result.final_decision
         })
+        print(f"[Council] session_complete sent! All done.")
+
+        # Clear council running flag
+        manager.council_running[session_id] = False
 
     except Exception as e:
         print(f"[WS] Council error: {e}")
@@ -328,6 +431,9 @@ async def run_council_discussion(session_id: str, session: dict, manager: Connec
             "final_score": 60,
             "decision": "invest"
         })
+
+        # Clear council running flag in exception handler too
+        manager.council_running[session_id] = False
 
 
 @router.get("/ws/health")

@@ -311,10 +311,14 @@ export default function CouncilPage() {
   const [votes, setVotes] = useState<VoteData[]>([])
   const [currentSpeaker, setCurrentSpeaker] = useState<string | null>(null)
   const [isDiscussionComplete, setIsDiscussionComplete] = useState(false)
+  const [isVerdictReady, setIsVerdictReady] = useState(false)  // Backend saved verdict
   const [councilStarted, setCouncilStarted] = useState(false)
 
   const dialogEndRef = useRef<HTMLDivElement>(null)
   const speakerTimeoutRef = useRef<NodeJS.Timeout | null>(null)
+  const isNavigatingRef = useRef(false)
+  const hasConnectedOnceRef = useRef(false)
+  const councilStartedRef = useRef(false)
 
   // WebSocket URL
   const wsUrl = `${process.env.NEXT_PUBLIC_WS_URL || 'ws://localhost:8000'}/ws/${sessionId}`
@@ -414,27 +418,39 @@ export default function CouncilPage() {
 
       case 'council_result': {
         // All votes are in, discussion is complete
-        const finalVotes = data.votes as VoteData[]
+        console.log('Council result received:', data)
+        const finalVotes = data.votes as Array<{name?: string; investor_id?: string; decision: string; score: number}>
 
         if (finalVotes && Array.isArray(finalVotes)) {
-          setVotes(finalVotes.map(v => ({
-            ...v,
-            investor_id: mapSpeakerToCharacter(v.investor_id),
-          })))
+          setVotes(finalVotes.map(v => {
+            // Handle both 'name' and 'investor_id' fields from backend
+            const speakerName = v.name || v.investor_id || 'Unknown'
+            return {
+              investor_id: mapSpeakerToCharacter(speakerName),
+              decision: v.decision === 'invest' ? 'invest' : 'pass',
+              confidence: v.score || 50,
+              reasoning: (v as Record<string, unknown>).rationale as string || '',
+            }
+          }))
         }
 
         setIsDiscussionComplete(true)
-
-        // Navigate to verdict after 3 seconds
-        setTimeout(() => {
-          router.push(`/verdict/${sessionId}`)
-        }, 3000)
+        setIsVerdictReady(true)  // council_result comes after verdict is saved
         break
       }
 
       case 'council_complete':
         setIsDiscussionComplete(true)
+        setIsVerdictReady(true)
         break
+
+      case 'session_complete': {
+        // Session is fully complete - verdict is now saved in backend
+        console.log('Session complete received - verdict is ready:', data)
+        setIsDiscussionComplete(true)
+        setIsVerdictReady(true)  // Now safe to navigate to verdict page
+        break
+      }
 
       case 'error':
         console.error('Council WebSocket error:', data.message)
@@ -446,31 +462,45 @@ export default function CouncilPage() {
     }
   }, [router, sessionId])
 
-  // WebSocket hook
+  // WebSocket hook - always allow reconnection (controlled by cleanup logic)
   const {
     status: wsStatus,
     send: wsSend,
     connect: wsConnect,
+    disconnect: wsDisconnect,
     isConnected
   } = useWebSocket({
     url: wsUrl,
     onMessage: handleWebSocketMessage,
-    onConnect: () => console.log('Council WebSocket connected'),
-    onDisconnect: () => console.log('Council WebSocket disconnected'),
+    onConnect: () => {
+      console.log('Council WebSocket connected')
+      hasConnectedOnceRef.current = true
+    },
+    onDisconnect: () => {
+      console.log('Council WebSocket disconnected')
+    },
     onError: (e) => console.error('Council WebSocket error:', e),
-    reconnect: true,
-    reconnectAttempts: 10,      // 5'ten 10'a çıkarıldı
-    reconnectInterval: 2000,    // 3000'den 2000ms'ye düşürüldü
-    heartbeatInterval: 15000,   // 30000'den 15000ms'ye düşürüldü (daha sık ping)
+    reconnect: true,            // Always allow reconnection
+    reconnectAttempts: 10,      // More attempts for reliability
+    reconnectInterval: 2000,    // Reconnect every 2 seconds
+    heartbeatInterval: 15000,   // 15 seconds heartbeat
   })
 
-  // Fetch session data
+  // Ref to prevent multiple fetch calls
+  const hasFetchedRef = useRef(false)
+
+  // Fetch session data - DO NOT check verdict on load (let council run)
   useEffect(() => {
+    if (hasFetchedRef.current) return
+
     async function fetchSession() {
+      hasFetchedRef.current = true
       try {
         const response = await apiCall<SessionData>(`/api/session/${sessionId}`)
         if (response.success && response.data) {
           setSessionData(response.data)
+          // Only redirect if status is completed AND we have votes already displayed
+          // This prevents skipping the council discussion
         } else {
           setError(response.error?.message || 'Session not found')
         }
@@ -484,31 +514,80 @@ export default function CouncilPage() {
     if (sessionId) {
       fetchSession()
     }
-  }, [sessionId])
+  }, [sessionId, router])
 
   // Connect WebSocket when session is loaded
   useEffect(() => {
-    if (sessionData && !isConnected && wsStatus === 'disconnected') {
+    // Connect if we have session data and not connected
+    if (sessionData && !isConnected && wsStatus === 'disconnected' && !isNavigatingRef.current) {
+      console.log('Attempting WebSocket connection...')
       wsConnect()
     }
-  }, [sessionData, isConnected, wsStatus, wsConnect])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sessionData, isConnected, wsStatus])
 
-  // Start council discussion when connected
+  // Disconnect when navigating or discussion is complete
   useEffect(() => {
-    if (isConnected && !councilStarted && !loading) {
-      wsSend('start_council', {})
-      setCouncilStarted(true)
+    if (isDiscussionComplete || isNavigatingRef.current) {
+      // Don't disconnect immediately - let the navigation happen
+      return
     }
-  }, [isConnected, councilStarted, loading, wsSend])
+  }, [isDiscussionComplete])
 
-  // Cleanup on unmount
+  // Start council discussion when connected (only once)
+  useEffect(() => {
+    // Multiple guards to prevent duplicate start_council events
+    if (!isConnected || loading || councilStarted || councilStartedRef.current || isDiscussionComplete) {
+      return
+    }
+
+    console.log('Sending start_council event (first and only time)...')
+    councilStartedRef.current = true
+    setCouncilStarted(true)
+    wsSend('start_council', {})
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isConnected, loading, councilStarted, isDiscussionComplete])
+
+  // Poll for verdict ONLY as fallback after we've seen some discussion
+  useEffect(() => {
+    // Only start polling after we have at least 5 messages (all votes)
+    // This ensures user sees the council discussion before redirect
+    if (!councilStarted || isDiscussionComplete || votes.length < 5) return
+
+    const checkVerdict = async () => {
+      try {
+        const response = await apiCall<{ verdict: unknown; status: string }>(`/api/session/${sessionId}/verdict`)
+        if (response.success && response.data?.verdict) {
+          console.log('Verdict found via polling - ready to view')
+          setIsDiscussionComplete(true)
+          setIsVerdictReady(true)  // Verdict exists, safe to navigate
+        }
+      } catch {
+        // Ignore errors
+      }
+    }
+
+    // Check every 5 seconds after all votes are in
+    const interval = setInterval(checkVerdict, 5000)
+
+    return () => clearInterval(interval)
+  }, [councilStarted, isDiscussionComplete, votes.length, sessionId, router])
+
+  // Cleanup on unmount - only disconnect if actually navigating away
   useEffect(() => {
     return () => {
       if (speakerTimeoutRef.current) {
         clearTimeout(speakerTimeoutRef.current)
       }
+      // Only mark as navigating and disconnect if discussion is complete
+      // This prevents React Strict Mode from breaking the connection
+      if (isDiscussionComplete) {
+        isNavigatingRef.current = true
+        wsDisconnect()
+      }
     }
-  }, [])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isDiscussionComplete])
 
   // Auto-scroll dialog
   useEffect(() => {
@@ -516,6 +595,8 @@ export default function CouncilPage() {
   }, [dialog])
 
   const handleGoToVerdict = () => {
+    isNavigatingRef.current = true
+    wsDisconnect()
     router.push(`/verdict/${sessionId}`)
   }
 
@@ -652,10 +733,17 @@ export default function CouncilPage() {
                         Investors are discussing...
                       </p>
                     </div>
+                  ) : !isVerdictReady ? (
+                    <div className="text-center">
+                      <Spinner className="w-6 h-6 mx-auto mb-2 text-green-500" />
+                      <p className="text-sm text-neutral-custom-subdued">
+                        Finalizing verdict...
+                      </p>
+                    </div>
                   ) : (
                     <>
-                      <p className="text-sm text-neutral-custom-subdued text-center">
-                        Discussion complete. You can view the results.
+                      <p className="text-sm text-green-600 text-center font-medium">
+                        Verdict ready!
                       </p>
                       <Button
                         onClick={handleGoToVerdict}

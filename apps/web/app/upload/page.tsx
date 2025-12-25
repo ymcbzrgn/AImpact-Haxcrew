@@ -153,6 +153,11 @@ interface BackendAnalysis {
 function transformAnalysis(backendData: BackendAnalysis | null): DeckAnalysis | null {
   if (!backendData) return null
 
+  // Check if analysis actually has valid data (not just error object)
+  if (!backendData.scores?.overall_score || backendData.scores.overall_score === 0) {
+    return null
+  }
+
   const categories = backendData.categories || {}
 
   const scores = {
@@ -343,8 +348,8 @@ export default function UploadPage() {
           return pollAnalysis()
         }
 
-        if (response.success && response.data?.status === 'analysis_failed') {
-          throw new Error('Deck analysis failed')
+        if (response.success && (response.data?.status === 'analysis_failed' || response.data?.status === 'error')) {
+          throw new Error('Deck analysis failed. Please try again with a different PDF.')
         }
 
         if (attempts >= maxAttempts) {

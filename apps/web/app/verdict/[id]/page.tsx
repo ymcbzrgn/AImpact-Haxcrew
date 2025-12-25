@@ -359,6 +359,45 @@ export default function VerdictPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
+  // Generate deck-specific feedback from deck analysis categories
+  const generateFeedbackFromDeckAnalysis = (deckAnalysis: SessionData['deck_analysis']): FeedbackItem[] => {
+    const feedback: FeedbackItem[] = []
+    const categories = deckAnalysis?.categories || {}
+
+    // Extract feedback from each category based on score
+    Object.entries(categories).forEach(([name, data]) => {
+      if (typeof data === 'object' && data !== null) {
+        const catData = data as { score?: number; feedback?: string }
+        const score = catData.score || 50
+        const categoryName = name.charAt(0).toUpperCase() + name.slice(1).replace('_', ' ')
+        const feedbackText = catData.feedback || ''
+
+        if (score >= 70) {
+          feedback.push({
+            category: categoryName,
+            type: 'strength',
+            content: feedbackText || `Strong ${categoryName.toLowerCase()} presentation.`
+          })
+        } else if (score < 40) {
+          feedback.push({
+            category: categoryName,
+            type: 'weakness',
+            content: feedbackText || `${categoryName} needs significant improvement.`
+          })
+        } else if (score < 60) {
+          feedback.push({
+            category: categoryName,
+            type: 'suggestion',
+            content: feedbackText || `Consider strengthening ${categoryName.toLowerCase()}.`
+          })
+        }
+      }
+    })
+
+    // Limit to 6 items
+    return feedback.slice(0, 6)
+  }
+
   // Helper function to generate fallback verdict from deck analysis
   const generateFallbackVerdict = (session: SessionData): VerdictData => {
     const overallScore = session.deck_analysis?.scores?.overall_score || 65
@@ -397,14 +436,7 @@ export default function VerdictPage() {
         ],
       } : undefined,
       category_scores: categoryScores,
-      feedback: [
-        { category: 'Problem', type: 'strength', content: 'Clearly identified the pain point of the target audience.' },
-        { category: 'Solution', type: 'strength', content: 'Solid technical foundation with scalable architecture.' },
-        { category: 'Market', type: 'strength', content: 'TAM calculation is realistic and well-researched.' },
-        { category: 'Traction', type: 'weakness', content: 'Could share more user metrics and engagement data.' },
-        { category: 'Team', type: 'weakness', content: 'Could benefit from someone with sales/marketing experience.' },
-        { category: 'Financials', type: 'suggestion', content: 'Consider detailing CAC/LTV calculations.' },
-      ],
+      feedback: generateFeedbackFromDeckAnalysis(session.deck_analysis),
       investor_pool_eligible: isInvest && overallScore >= 75,
     }
   }
@@ -414,11 +446,15 @@ export default function VerdictPage() {
     async function fetchData() {
       try {
         // First, try to fetch verdict directly from backend
-        const verdictResponse = await apiCall<VerdictData>(`/api/session/${sessionId}/verdict`)
+        // Backend returns { success, data: { session_id, status, verdict, deck_analysis, final_score } }
+        const verdictResponse = await apiCall<{ session_id: string; status: string; verdict: VerdictData | null; deck_analysis: SessionData['deck_analysis']; final_score: number | null }>(`/api/session/${sessionId}/verdict`)
 
-        if (verdictResponse.success && verdictResponse.data) {
-          // Use backend verdict data
-          setVerdictData(verdictResponse.data)
+        console.log('Verdict API response:', verdictResponse)
+
+        if (verdictResponse.success && verdictResponse.data?.verdict) {
+          // Use backend verdict data - it's nested inside data.verdict
+          console.log('Using backend verdict:', verdictResponse.data.verdict)
+          setVerdictData(verdictResponse.data.verdict)
 
           // Also fetch session for additional info
           const sessionResponse = await apiCall<SessionData>(`/api/session/${sessionId}`)
@@ -426,17 +462,19 @@ export default function VerdictPage() {
             setSessionData(sessionResponse.data)
           }
 
-          // Save to history
+          // Save to history - use verdict data for score and decision
+          const verdict = verdictResponse.data.verdict
           addToHistory({
             id: sessionId,
             date: new Date().toISOString(),
-            investorMode: (investorMode || verdictResponse.data.session_id || 'friendly') as 'shark' | 'friendly' | 'analyst',
-            score: verdictResponse.data.final_score,
-            decision: verdictResponse.data.decision,
+            investorMode: (investorMode || 'friendly') as 'shark' | 'friendly' | 'analyst',
+            score: verdict.final_score ?? verdictResponse.data.final_score ?? 0,
+            decision: verdict.decision,
             deckName: deckName || undefined,
           })
         } else {
           // Fallback: fetch session and generate verdict locally
+          console.log('No backend verdict found, using fallback')
           const sessionResponse = await apiCall<SessionData>(`/api/session/${sessionId}`)
 
           if (sessionResponse.success && sessionResponse.data) {
@@ -592,17 +630,17 @@ export default function VerdictPage() {
 
           <div className="flex items-center justify-center gap-8">
             <div>
-              <ScoreCircle score={verdictData.final_score} size="large" />
+              <ScoreCircle score={verdictData.final_score ?? 0} size="large" />
               <p className="mt-2 text-sm opacity-75">Final Score</p>
             </div>
             <div className="text-left">
               <div className="flex items-center gap-2 mb-2">
                 <span className="text-green-200">Invest:</span>
-                <span className="font-bold text-2xl">{verdictData.investor_votes.invest}</span>
+                <span className="font-bold text-2xl">{verdictData.investor_votes?.invest ?? 0}</span>
               </div>
               <div className="flex items-center gap-2">
                 <span className="text-red-200">Pass:</span>
-                <span className="font-bold text-2xl">{verdictData.investor_votes.pass}</span>
+                <span className="font-bold text-2xl">{verdictData.investor_votes?.pass ?? 0}</span>
               </div>
             </div>
           </div>
@@ -635,13 +673,17 @@ export default function VerdictPage() {
             )}
 
             {/* Category Breakdown */}
-            <CategoryBreakdown categories={verdictData.category_scores} />
+            {verdictData.category_scores && verdictData.category_scores.length > 0 && (
+              <CategoryBreakdown categories={verdictData.category_scores} />
+            )}
           </div>
 
           {/* Right Column */}
           <div className="space-y-6">
             {/* Feedback */}
-            <FeedbackList feedback={verdictData.feedback} />
+            {verdictData.feedback && verdictData.feedback.length > 0 && (
+              <FeedbackList feedback={verdictData.feedback} />
+            )}
 
             {/* Actions */}
             <Card className="bg-white">
