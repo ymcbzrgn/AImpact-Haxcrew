@@ -16,38 +16,33 @@ from datetime import datetime
 
 
 async def extract_text_from_pdf(file_bytes: bytes) -> List[Dict]:
-    """Extract text and images from PDF file with enhanced OCR"""
+    """Extract text and images from PDF file - optimized for speed"""
     import base64
     slides = []
     doc = fitz.open(stream=file_bytes, filetype="pdf")
 
-    for page_num, page in enumerate(doc):
+    # Limit to first 10 slides for demo speed
+    max_slides = min(len(doc), 10)
+
+    for page_num in range(max_slides):
+        page = doc[page_num]
         text = page.get_text()
 
-        # Always try OCR for better accuracy, especially for image-heavy slides
-        ocr_text = ""
+        # Get low-res image for display (skip OCR for speed)
         image_base64 = ""
         try:
-            pix = page.get_pixmap(dpi=150)  # 150 DPI for display
+            pix = page.get_pixmap(dpi=72)  # Low DPI for speed
             img_bytes = pix.tobytes("png")
             image_base64 = base64.b64encode(img_bytes).decode('utf-8')
-
-            # OCR from higher res version
-            pix_ocr = page.get_pixmap(dpi=300)
-            img = Image.open(io.BytesIO(pix_ocr.tobytes()))
-            ocr_text = pytesseract.image_to_string(img).strip()
         except Exception as e:
-            print(f"[PDF] Image/OCR failed for page {page_num + 1}: {e}")
-
-        # Merge text and OCR results intelligently
-        combined_text = _merge_text_and_ocr(text, ocr_text)
+            print(f"[PDF] Image failed for page {page_num + 1}: {e}")
 
         slides.append({
             "slide_number": page_num + 1,
-            "content": combined_text,
-            "text_source": "pdf" if text.strip() else "ocr",
-            "has_ocr": bool(ocr_text),
-            "image_base64": image_base64  # Base64 encoded PNG image
+            "content": text.strip(),
+            "text_source": "pdf",
+            "has_ocr": False,
+            "image_base64": image_base64
         })
 
     doc.close()
@@ -55,44 +50,28 @@ async def extract_text_from_pdf(file_bytes: bytes) -> List[Dict]:
 
 
 async def extract_text_from_pptx(file_bytes: bytes) -> List[Dict]:
-    """Extract text from PPTX file with enhanced image/OCR support"""
+    """Extract text from PPTX file - optimized for speed (skip OCR)"""
     slides = []
     prs = Presentation(io.BytesIO(file_bytes))
 
-    for slide_num, slide in enumerate(prs.slides):
-        text_parts = []
-        ocr_texts = []
+    # Limit to first 10 slides for demo speed
+    all_slides = list(prs.slides)[:10]
 
-        # Extract text from shapes
+    for slide_num, slide in enumerate(all_slides):
+        text_parts = []
+
+        # Extract text from shapes only (skip OCR for speed)
         for shape in slide.shapes:
             if hasattr(shape, "text") and shape.text.strip():
                 text_parts.append(shape.text)
 
-        # Extract images and run OCR
-        for shape in slide.shapes:
-            if hasattr(shape, "image") and shape.image:
-                try:
-                    # Get image bytes
-                    image_bytes = shape.image.blob
-                    img = Image.open(io.BytesIO(image_bytes))
-                    ocr_result = pytesseract.image_to_string(img).strip()
-                    if ocr_result:
-                        ocr_texts.append(ocr_result)
-                except Exception as e:
-                    print(f"[PPTX] OCR failed for slide {slide_num + 1}: {e}")
-
-        # Combine text and OCR results
         combined_text = "\n".join(text_parts).strip()
-        ocr_combined = "\n".join(ocr_texts).strip()
-
-        # Merge intelligently
-        final_text = _merge_text_and_ocr(combined_text, ocr_combined)
 
         slides.append({
             "slide_number": slide_num + 1,
-            "content": final_text,
-            "text_source": "pptx" if combined_text else "ocr",
-            "has_ocr": bool(ocr_combined)
+            "content": combined_text,
+            "text_source": "pptx",
+            "has_ocr": False
         })
 
     return slides
@@ -216,71 +195,67 @@ async def analyze_deck(
     feedback_tone: str = "constructive"
 ) -> Dict[str, Any]:
     """
-    Analyze deck using Gemini 3 Pro
+    Analyze deck using Gemini Flash - FAST MODE (10-15 seconds)
 
     Args:
         slides: List of slide dicts with slide_number and content
         feedback_tone: "brutal" | "constructive" | "encouraging"
 
     Returns:
-        Comprehensive deck analysis as dict
+        Deck analysis as dict
     """
-    from services.gemini_service import generate_text_pro
-    from prompts.deck_analysis import DECK_ANALYSIS_SYSTEM_PROMPT
+    from services.gemini_service import generate_text
 
-    # Format slides for prompt
-    slides_text = "\n\n".join([
-        f"Slide {s['slide_number']}:\n{s['content']}"
-        for s in slides
+    # Format slides - only first 5 slides for speed
+    slides_to_analyze = slides[:5]
+    slides_text = "\n".join([
+        f"Slide {s['slide_number']}: {s['content'][:500]}"  # Limit content per slide
+        for s in slides_to_analyze
     ])
 
-    # Detect deck language (for reference only - output is ALWAYS in English)
-    deck_text = " ".join([s["content"] for s in slides])
-    turkish_chars = set("şŞğĞüÜöÖçÇıİ")
-    is_turkish = any(char in deck_text for char in turkish_chars)
-    deck_language = "tr" if is_turkish else "en"
+    # Quick system prompt (short = fast)
+    system_prompt = """You are a VC analyst. Analyze pitch decks quickly.
+Output ONLY valid JSON, no markdown. All text in ENGLISH."""
 
-    # Build metadata - output_language is ALWAYS English regardless of deck language
-    metadata = {
-        "slide_count": len(slides),
-        "file_format": "PDF",  # Default, can be updated
-        "deck_language": deck_language,  # Language of the deck content
-        "output_language": "en",  # ALWAYS output analysis in English
-        "feedback_tone": feedback_tone
-    }
+    # Simple prompt for fast analysis
+    prompt = f"""Analyze this pitch deck. Output JSON only.
 
-    prompt = f"""# ABSOLUTE REQUIREMENT: RESPOND IN ENGLISH ONLY
-
-⚠️ CRITICAL: YOUR ENTIRE RESPONSE MUST BE IN ENGLISH ⚠️
-
-Even though the deck content below is in {deck_language.upper()} ({"Turkish" if is_turkish else "non-English"}), YOU MUST:
-- Write ALL text in ENGLISH
-- Translate any quotes from the deck to English
-- Use English for: executive_summary, feedback, evidence_found, missing, improvement, rationale - EVERY field
-
-DO NOT write in Turkish or any other language. English ONLY.
-
----
-
-<deck_metadata>
-{json.dumps(metadata, ensure_ascii=False)}
-</deck_metadata>
-
-<slides>
+SLIDES:
 {slides_text}
-</slides>
 
----
+Return this exact JSON structure:
+{{
+  "analysis_metadata": {{
+    "slide_count": {len(slides)},
+    "detected_stage": "Pre-seed" or "Seed" or "Series A",
+    "detected_sector": "<sector>"
+  }},
+  "executive_summary": "<2 sentences: main strength and main weakness>",
+  "scores": {{
+    "overall_score": <0-100, average deck=65>,
+    "investment_grade": "A/B/C/D/F with +/-",
+    "fundability": "Ready/Almost Ready/Needs Work/Not Ready"
+  }},
+  "categories": {{
+    "problem": {{"score": <0-100>, "feedback": "<1 sentence>"}},
+    "solution": {{"score": <0-100>, "feedback": "<1 sentence>"}},
+    "market": {{"score": <0-100>, "feedback": "<1 sentence>"}},
+    "business_model": {{"score": <0-100>, "feedback": "<1 sentence>"}},
+    "traction": {{"score": <0-100>, "feedback": "<1 sentence>"}},
+    "team": {{"score": <0-100>, "feedback": "<1 sentence>"}},
+    "financials": {{"score": <0-100>, "feedback": "<1 sentence>"}},
+    "competitive_advantage": {{"score": <0-100>, "feedback": "<1 sentence>"}},
+    "scalability": {{"score": <0-100>, "feedback": "<1 sentence>"}}
+  }},
+  "strong_points": ["<strength1>", "<strength2>"],
+  "weak_points": ["<weakness1>", "<weakness2>"],
+  "deal_killers": []
+}}
 
-⚠️ FINAL REMINDER: OUTPUT LANGUAGE = ENGLISH ⚠️
-- If the deck says "Müşteri" → You write "Customer"
-- If the deck says "Pazar" → You write "Market"
-- Translate EVERYTHING to English in your JSON output.
+Output ONLY the JSON, no other text:"""
 
-Now analyze this deck and respond with a JSON object in ENGLISH ONLY:"""
-
-    # Call Gemini 3 Pro for high-quality analysis
-    response = await generate_text_pro(prompt, DECK_ANALYSIS_SYSTEM_PROMPT)
+    # Call Gemini Flash with 45 second timeout (some PDFs need more time)
+    response = await generate_text(prompt, system_prompt, model_type="flash", timeout=45)
 
     # Parse JSON response
     try:

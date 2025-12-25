@@ -84,13 +84,16 @@ export function useWebSocket({
         onConnect?.()
       }
 
-      wsRef.current.onclose = () => {
+      wsRef.current.onclose = (event) => {
         setStatus('disconnected')
         clearHeartbeat()
         onDisconnect?.()
 
-        // Attempt reconnection
-        if (reconnect && reconnectCountRef.current < reconnectAttempts) {
+        // Attempt reconnection only if it wasn't a clean close
+        // Code 1000 = normal closure, 1001 = going away (navigation)
+        const wasCleanClose = event.code === 1000 || event.code === 1001
+        if (reconnect && !wasCleanClose && reconnectCountRef.current < reconnectAttempts) {
+          console.log(`WebSocket closed unexpectedly (code: ${event.code}), attempting reconnect ${reconnectCountRef.current + 1}/${reconnectAttempts}`)
           reconnectCountRef.current++
           reconnectTimeoutRef.current = setTimeout(() => {
             connect()

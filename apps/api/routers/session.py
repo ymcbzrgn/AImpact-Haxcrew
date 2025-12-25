@@ -264,6 +264,12 @@ async def get_verdict(session_id: str):
             error={"code": "SESSION_NOT_FOUND", "message": "Session not found"}
         )
 
+    verdict = session.get("verdict")
+    print(f"[Verdict API] Session {session_id[:8]}: verdict exists = {verdict is not None}")
+    if verdict:
+        print(f"[Verdict API] Verdict keys: {list(verdict.keys()) if isinstance(verdict, dict) else 'not a dict'}")
+        print(f"[Verdict API] Feedback count: {len(verdict.get('feedback', []))}")
+
     return SessionResponse(
         success=True,
         data={

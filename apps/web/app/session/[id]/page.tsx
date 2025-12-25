@@ -362,6 +362,7 @@ export default function SessionPage() {
   // Slide loading state
   const [slidesLoading, setSlidesLoading] = useState(false)
   const pollIntervalRef = useRef<NodeJS.Timeout | null>(null)
+  const hasFetchedRef = useRef(false)
 
   // AI Audio playback
   const audioQueueRef = useRef<string[]>([])
@@ -523,7 +524,11 @@ export default function SessionPage() {
 
   // Fetch session data and connect WebSocket
   useEffect(() => {
+    // Prevent multiple fetches
+    if (hasFetchedRef.current) return
+
     async function fetchSession() {
+      hasFetchedRef.current = true
       try {
         const response = await apiCall<SessionData>(`/api/session/${sessionId}`)
         if (response.success && response.data) {
@@ -537,10 +542,12 @@ export default function SessionPage() {
           // Connect to WebSocket after session is loaded
           wsConnect()
 
-          // If slides aren't ready yet, start polling
+          // If slides aren't ready yet, start polling (only if not already polling)
           if (!response.data.slide_contents || response.data.slide_contents.length === 0) {
-            setSlidesLoading(true)
-            pollForSlides()
+            if (!pollIntervalRef.current) {
+              setSlidesLoading(true)
+              pollForSlides()
+            }
           }
         } else {
           setError(response.error?.message || 'Session not found')
@@ -584,7 +591,7 @@ export default function SessionPage() {
         }
       }
 
-      pollIntervalRef.current = setInterval(poll, 1000)
+      pollIntervalRef.current = setInterval(poll, 2000) // Poll every 2 seconds instead of 1
     }
 
     if (sessionId) {
@@ -597,7 +604,8 @@ export default function SessionPage() {
         clearInterval(pollIntervalRef.current)
       }
     }
-  }, [sessionId, wsConnect])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sessionId])
 
   // Auto-scroll messages
   useEffect(() => {
